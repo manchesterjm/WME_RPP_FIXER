@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      3.6.0
-// @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if it's 1 or 2. Includes automatic map scanning!
+// @version      3.7.0
+// @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if it's 1 or 2. Includes automatic map scanning with ETA!
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
 // @grant        none
@@ -10,7 +10,7 @@
 
 /*
  * WME RPP Auto-Fixer
- * Version: 3.6.0
+ * Version: 3.7.0
  *
  * OVERVIEW:
  * This script automatically fixes Residential Place Points (RPPs) in the Waze Map Editor.
@@ -47,7 +47,7 @@
 (function() {
     'use strict';
 
-    console.log("Script loaded: WME RPP Auto-Fixer v3.6.0 - AUTO-FIX + AUTO-SCAN MODE");
+    console.log("Script loaded: WME RPP Auto-Fixer v3.7.0 - AUTO-FIX + AUTO-SCAN MODE with ETA");
 
     // ============================================================================
     // CLASSES
@@ -167,6 +167,7 @@
         startExtent: null,              // Original map extent when scan started
         startCenter: null,              // Original map center when scan started
         startZoom: null,                // Original zoom level when scan started
+        startTime: null,                // Timestamp when scan started (for ETA calculation)
         nextCenter: null,               // Next tile center to pan to
         direction: 1,                   // Scan direction: 1 = left-to-right, -1 = right-to-left (snake pattern)
         firstStep: true,                // Flag for first tile in scan
@@ -511,6 +512,7 @@
             scannerState.startExtent = startExtent;
             scannerState.startCenter = W.map.getCenter();
             scannerState.startZoom = W.map.getZoom();
+            scannerState.startTime = Date.now();  // Track start time for ETA calculation
             scannerState.status = STATE_RUNNING;
             scannerState.direction = 1;  // Start going left-to-right
             scannerState.firstStep = true;
@@ -689,6 +691,7 @@
         scannerState.startExtent = null;
         scannerState.startCenter = null;
         scannerState.startZoom = null;
+        scannerState.startTime = null;  // Reset start time
         scannerState.scanningCurrentTile = false;
         forceUIUpdate(0); // Force immediate update, cancel any pending
     }
@@ -778,8 +781,21 @@
             html += `<p style="margin: 5px 0; font-size: 12px;">Row ${scannerState.currentRow + 1}/${scannerState.totalRows}, Col ${scannerState.currentCol + 1}/${scannerState.totalCols}</p>`;
 
             // Calculate and display progress percentage
-            const progress = ((scannerState.currentRow * scannerState.totalCols + scannerState.currentCol) / (scannerState.totalRows * scannerState.totalCols) * 100).toFixed(1);
+            const tilesCompleted = scannerState.currentRow * scannerState.totalCols + scannerState.currentCol;
+            const totalTiles = scannerState.totalRows * scannerState.totalCols;
+            const progress = (tilesCompleted / totalTiles * 100).toFixed(1);
             html += `<p style="margin: 5px 0; font-size: 12px;">Progress: ${progress}%</p>`;
+
+            // Calculate and display estimated time remaining
+            if (scannerState.startTime && tilesCompleted > 0 && isRunning) {
+                const elapsedMs = Date.now() - scannerState.startTime;
+                const msPerTile = elapsedMs / tilesCompleted;
+                const tilesRemaining = totalTiles - tilesCompleted;
+                const estimatedRemainingMs = msPerTile * tilesRemaining;
+
+                html += `<p style="margin: 5px 0; font-size: 12px;">Estimated time remaining: ${formatTime(estimatedRemainingMs)}</p>`;
+            }
+
             html += '</div>';
         }
 
@@ -922,6 +938,33 @@
         if (streetName.trim()) parts.push(streetName.trim());
 
         return parts.join(" ") || "No Address";
+    }
+
+    /**
+     * Format milliseconds into human-readable time string
+     *
+     * Converts a duration in milliseconds to a readable format.
+     * Examples:
+     * - 45000 ms → "45s"
+     * - 150000 ms → "2m 30s"
+     * - 5400000 ms → "1h 30m"
+     *
+     * @function formatTime
+     * @param {number} ms - Duration in milliseconds
+     * @returns {string} Formatted time string
+     */
+    function formatTime(ms) {
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        const parts = [];
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0) parts.push(`${minutes}m`);
+        if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+
+        return parts.join(" ");
     }
 
     // ============================================================================
