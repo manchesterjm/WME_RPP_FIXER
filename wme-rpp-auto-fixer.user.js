@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      3.7.0
+// @version      3.8.0
 // @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if it's 1 or 2. Includes automatic map scanning with ETA!
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
@@ -10,7 +10,7 @@
 
 /*
  * WME RPP Auto-Fixer
- * Version: 3.7.0
+ * Version: 3.8.0
  *
  * OVERVIEW:
  * This script automatically fixes Residential Place Points (RPPs) in the Waze Map Editor.
@@ -47,7 +47,7 @@
 (function() {
     'use strict';
 
-    console.log("Script loaded: WME RPP Auto-Fixer v3.7.0 - AUTO-FIX + AUTO-SCAN MODE with ETA");
+    console.log("Script loaded: WME RPP Auto-Fixer v3.8.0 - Code Quality Improvements");
 
     // ============================================================================
     // CLASSES
@@ -131,13 +131,22 @@
     // ============================================================================
 
     // Scanner constants (inspired by WME Validator)
-    const SCAN_ZOOM = 19;        // Zoom level for scanning (19 = very zoomed in, small tiles, fast loading)
-    const SCAN_OVERLAP = 0.1;    // 10% overlap between adjacent tiles to ensure no RPPs are missed at boundaries
+    const SCAN_ZOOM = 19;                    // Zoom level for scanning (19 = very zoomed in, small tiles, fast loading)
+    const SCAN_OVERLAP = 0.1;                // 10% overlap between adjacent tiles to ensure no RPPs are missed at boundaries
+    const SCAN_DELAY_MS = 500;               // Delay after mergeend event before moving to next tile (ms)
+    const SCAN_ZOOM_WAIT_MS = 500;           // Wait time for zoom operation to complete (ms)
+
+    // UI constants
+    const UI_UPDATE_THROTTLE_MS = 100;       // Minimum time between UI rebuilds to prevent performance issues (ms)
+
+    // RPP Fix constants
+    const LOCK_LEVEL_3 = 2;                  // WME lock rank value for Level 3 (0-indexed, displays as "3" in UI)
+    const RPP_CATEGORY = "RESIDENCE_HOME";   // WME category identifier for Residential Place Points
 
     // Scanner state constants
-    const STATE_STOPPED = 'stopped';  // Scanner is not running
-    const STATE_RUNNING = 'running';  // Scanner is actively scanning
-    const STATE_PAUSED = 'paused';    // Scanner is paused (can be resumed)
+    const STATE_STOPPED = 'stopped';         // Scanner is not running
+    const STATE_RUNNING = 'running';         // Scanner is actively scanning
+    const STATE_PAUSED = 'paused';           // Scanner is paused (can be resumed)
 
     // ============================================================================
     // GLOBAL STATE
@@ -258,7 +267,7 @@
             setTimeout(() => {
                 scannerState.scanningCurrentTile = false; // Reset flag before moving
                 moveToNextScanPosition();                 // Move to next tile
-            }, 500); // Brief 500ms delay (much faster than old 6.5s!)
+            }, SCAN_DELAY_MS);
         } else if (scannerState.status !== STATE_RUNNING) {
             // Manual mode: user is panning around manually
             scanAndFixRPPs();
@@ -298,7 +307,7 @@
 
             // Get all venues currently loaded in WME, filter for RPPs
             const allRPPs = W.model.venues.getObjectArray().filter(v => {
-                return v.attributes?.categories?.includes("RESIDENCE_HOME");
+                return v.attributes?.categories?.includes(RPP_CATEGORY);
             });
 
             console.log(`Scan: ${allRPPs.length} RPPs visible, ${sessionStats.fixedVenueIds.size} already fixed this session`);
@@ -319,7 +328,7 @@
 
                     // Check what fixes this RPP needs
                     const needsEntryPoint = !rpp.attributes.entryExitPoints?.length;
-                    const needsLockFix = (rpp.attributes.lockRank < 2);
+                    const needsLockFix = (rpp.attributes.lockRank < LOCK_LEVEL_3);
 
                     if (needsEntryPoint || needsLockFix) {
                         // Fix this RPP immediately
@@ -391,11 +400,11 @@
                 }
             }
 
-            // Fix 2: Set lockRank to 2 (UI displays as level 3)
+            // Fix 2: Set lockRank to LOCK_LEVEL_3 (UI displays as level 3)
             // Lock levels: 0=L1, 1=L2, 2=L3, 3=L4, etc.
             if (needsLockFix) {
                 W.model.actionManager.add(new UpdateObject(rpp, {
-                    lockRank: 2  // Level 3 prevents casual editors from modifying
+                    lockRank: LOCK_LEVEL_3  // Level 3 prevents casual editors from modifying
                 }));
 
                 console.log(`✅ Set lock level 3 for: ${address}`);
@@ -558,7 +567,7 @@
                 W.map.setCenter(scannerState.nextCenter, SCAN_ZOOM);
 
                 forceUIUpdate(0); // Force immediate update
-            }, 500); // Wait 500ms for zoom to complete
+            }, SCAN_ZOOM_WAIT_MS);
         } catch (err) {
             console.error("startScanning: error:", err);
         }
@@ -664,7 +673,7 @@
         scannerState.status = STATE_RUNNING;
         turnLayersOff(); // Turn layers back off when resuming
         forceUIUpdate(0); // Force immediate update, cancel any pending
-        setTimeout(moveToNextScanPosition, 500); // Wait 500ms (matches onMergeEnd)
+        setTimeout(moveToNextScanPosition, SCAN_DELAY_MS);
     }
 
     /**
@@ -703,7 +712,7 @@
     /**
      * Schedule UI update (throttled)
      *
-     * Prevents too-frequent UI rebuilds by throttling updates to max once per 100ms.
+     * Prevents too-frequent UI rebuilds by throttling updates to prevent performance issues.
      * Used during scanning to avoid performance issues from constant DOM manipulation.
      *
      * @function scheduleUIUpdate
@@ -717,7 +726,7 @@
             displayUI(currentViewCount);
             uiUpdateScheduled = false;
             uiUpdateTimeout = null;
-        }, 100); // Wait 100ms before updating
+        }, UI_UPDATE_THROTTLE_MS);
     }
 
     /**

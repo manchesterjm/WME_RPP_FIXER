@@ -7,7 +7,11 @@
       "Bash(curl:*)",
       "Bash(unzip:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial commit: WME RPP Auto-Fixer v3.6.0\n\nThis repository contains the WME RPP Auto-Fixer userscript and supporting documentation.\n\nMain Features:\n- Automatically fixes RPPs (Residential Place Points) in Waze Map Editor\n- Two modes: Manual (pan around) and Auto-Scan (automatic grid scanning)\n- Event-driven scanning using mergeend event\n- Zoom 19 optimization for fast scanning (~8x faster than previous versions)\n- Comprehensive documentation and session progress tracking\n\nKey Files:\n- wme-rpp-auto-fixer.user.js: Main script (v3.6.0) with full JSDoc documentation\n- SESSION_PROGRESS.md: Complete development history and technical details\n- reference-scripts/: Collection of reference WME scripts for development\n\nDocumentation:\n- README.md: Main project documentation\n- RPP-AUTO-FIXER-GUIDE.md: User guide for the auto-fixer script\n- WME-API-GUIDE.md: WME API reference\n- And many other helpful guides\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
