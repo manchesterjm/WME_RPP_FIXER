@@ -476,7 +476,8 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
 | 3.9.0 | ESLint integration | ✅ Automated linting |
 | 3.10.0 | Visual progress bar | ✅ Better UI feedback |
 | 3.10.1 | Zoom 17 experiment | ⚠️ Reverted |
-| 3.10.2 | Zoom 19 restored | ✅ Current version |
+| 3.10.2 | Zoom 19 restored | ✅ Previous version |
+| 3.11.0 | Auto-pause at 100 changes | ✅ Current version |
 
 ---
 
@@ -529,6 +530,28 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
 **Changed**: Reverted back to zoom 19
 - User preferred speed optimization
 - Zoom 19 works best with event-driven approach
+
+### Version 3.11.0 - Auto-Pause at 100 Changes (WME Performance Limit)
+**Added**: Automatic pause when pending changes reach WME's performance limit
+- **Problem**: WME becomes very slow when >100 changes are pending save
+- **Solution**: Implemented auto-pause and resume system
+- **New Constant**: `MAX_PENDING_CHANGES = 100`
+- **New Tracking**: `sessionStats.pendingChanges` counter
+- **Auto-Pause Logic**:
+  - Increments counter after each RPP fix
+  - When counter reaches 100 during scan, automatically pauses
+  - Alerts user to save changes
+  - Displays pending count in UI with warning colors (orange at 80, red at 100)
+- **Save Detection**:
+  - Monitors WME's `isChanged` property
+  - Detects when save completes
+  - Automatically resets pending counter to 0
+  - Auto-resumes scanning after 1-second delay
+- **UI Enhancement**:
+  - Shows "Pending changes: X / 100" in Session Statistics
+  - Color-coded warnings (orange at 80+, red at 100)
+  - Bold text when approaching/at limit
+- **User Experience**: Seamless workflow - scan pauses at 100, user saves, scan auto-resumes
 - Current active version
 
 ### Infrastructure Improvements
@@ -547,8 +570,8 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
 
 ## Conclusion
 
-Successfully transformed the script from manual-only (v3.0.0) to a fully-featured, production-ready auto-fixer (v3.10.2). The journey involved:
-- 17 version iterations
+Successfully transformed the script from manual-only (v3.0.0) to a fully-featured, production-ready auto-fixer (v3.11.0). The journey involved:
+- 18 version iterations
 - Fixing 5 major bugs
 - Learning WME's modern API
 - Understanding event-driven architecture
@@ -556,5 +579,6 @@ Successfully transformed the script from manual-only (v3.0.0) to a fully-feature
 - Implementing professional code standards
 - Adding automated quality checks
 - Enhancing user experience with visual feedback
+- Implementing WME performance limit protection
 
-Final result: **~8x faster** than v3.5.1 with professional code quality, automated linting, visual progress tracking, and comprehensive version control.
+Final result: **~8x faster** than v3.5.1 with professional code quality, automated linting, visual progress tracking, auto-pause at WME's performance limit (100 changes), and comprehensive version control.

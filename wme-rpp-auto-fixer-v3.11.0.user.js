@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      3.10.2
+// @version      3.11.0
 // @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if it's 1 or 2. Includes automatic map scanning with ETA!
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
@@ -10,7 +10,7 @@
 
 /*
  * WME RPP Auto-Fixer
- * Version: 3.10.2
+ * Version: 3.11.0
  *
  * OVERVIEW:
  * This script automatically fixes Residential Place Points (RPPs) in the Waze Map Editor.
@@ -47,7 +47,7 @@
 (function() {
     'use strict';
 
-    console.log('Script loaded: WME RPP Auto-Fixer v3.10.2 - Scan Zoom 19');
+    console.log('Script loaded: WME RPP Auto-Fixer v3.11.0 - Auto-pause at 100 changes');
 
     // ============================================================================
     // CLASSES
@@ -142,6 +142,7 @@
     // RPP Fix constants
     const LOCK_LEVEL_3 = 2;                  // WME lock rank value for Level 3 (0-indexed, displays as "3" in UI)
     const RPP_CATEGORY = 'RESIDENCE_HOME';   // WME category identifier for Residential Place Points
+    const MAX_PENDING_CHANGES = 100;         // WME performance limit (editor slows down with >100 pending changes)
 
     // Scanner state constants
     const STATE_STOPPED = 'stopped';         // Scanner is not running
@@ -163,7 +164,8 @@
         totalFixed: 0,           // Total number of RPPs fixed this session
         entryPointsAdded: 0,     // How many RPPs needed entry points added
         lockLevelsFixed: 0,      // How many RPPs needed lock level changed
-        fixedVenueIds: new Set() // Set of venue IDs already fixed (prevents duplicates)
+        fixedVenueIds: new Set(), // Set of venue IDs already fixed (prevents duplicates)
+        pendingChanges: 0        // Number of unsaved changes (resets to 0 after save)
     };
 
     // UI update throttling
@@ -218,6 +220,10 @@
                 // This is the event-driven trigger for scanning (like WME Validator uses)
                 W.model.events.on({'mergeend': onMergeEnd});
 
+                // Listen for save completion to reset pending changes counter
+                // and auto-resume scanning if it was paused due to reaching limit
+                W.model.on('change:isChanged', onSaveComplete);
+
                 // Also scan when WME becomes ready
                 document.addEventListener('wme-ready', scanAndFixRPPs);
 
@@ -234,6 +240,41 @@
     // ============================================================================
     // EVENT HANDLERS
     // ============================================================================
+
+    /**
+     * Called when WME's save state changes
+     *
+     * Monitors WME's isChanged property which indicates if there are unsaved changes.
+     * When isChanged becomes false, it means a save just completed.
+     *
+     * On save completion:
+     * - Resets pending changes counter to 0
+     * - Auto-resumes scanning if it was paused due to hitting the 100-change limit
+     * - Updates UI to reflect the reset counter
+     *
+     * @function onSaveComplete
+     */
+    function onSaveComplete() {
+        // Check if save just completed (isChanged false = no unsaved changes)
+        if (!W.model.get('isChanged') && sessionStats.pendingChanges > 0) {
+            const previousPending = sessionStats.pendingChanges;
+            console.log(`💾 Save detected! Resetting pending changes counter (was ${previousPending})`);
+
+            // Reset counter - all changes have been saved
+            sessionStats.pendingChanges = 0;
+
+            // Auto-resume scanning if it was paused due to hitting limit
+            if (scannerState.status === STATE_PAUSED) {
+                console.log('✅ Auto-resuming scan after save...');
+                setTimeout(() => {
+                    resumeScanning();
+                }, 1000); // Brief delay to ensure save is fully complete
+            } else {
+                // Just update UI to show reset counter
+                forceUIUpdate(0);
+            }
+        }
+    }
 
     /**
      * Called when WME's map merge completes (event-driven)
@@ -412,6 +453,16 @@
                 }));
 
                 console.log(`✅ Set lock level 3 for: ${address}`);
+            }
+
+            // Track pending change (WME has performance issues with >100 pending changes)
+            sessionStats.pendingChanges++;
+
+            // Auto-pause scan if we've hit the limit
+            if (sessionStats.pendingChanges >= MAX_PENDING_CHANGES && scannerState.status === STATE_RUNNING) {
+                console.warn(`⚠️ Reached ${MAX_PENDING_CHANGES} pending changes, pausing scan...`);
+                pauseScanning();
+                alert(`⚠️ You have ${sessionStats.pendingChanges} changes pending!\n\nWME slows down with more than 100 pending changes.\n\nPlease click Save to continue scanning.`);
             }
         } catch (err) {
             console.error('fixRPP: error:', err);
@@ -834,6 +885,13 @@
         html += `<li>Total RPPs fixed: <strong>${sessionStats.totalFixed}</strong></li>`;
         html += `<li>Entry points added: ${sessionStats.entryPointsAdded}</li>`;
         html += `<li>Lock levels set to 3: ${sessionStats.lockLevelsFixed}</li>`;
+
+        // Pending changes with warning color if approaching limit
+        const pendingColor = sessionStats.pendingChanges >= MAX_PENDING_CHANGES ? '#C62828' :
+                            sessionStats.pendingChanges >= 80 ? '#F57C00' : '#333';
+        const pendingWeight = sessionStats.pendingChanges >= 80 ? 'bold' : 'normal';
+        html += `<li style="color: ${pendingColor}; font-weight: ${pendingWeight};">Pending changes: ${sessionStats.pendingChanges} / ${MAX_PENDING_CHANGES}</li>`;
+
         html += '</ul>';
         html += `<p style="margin: 5px 0; font-size: 12px; color: #666;">Current view: ${currentViewCount} RPPs</p>`;
         html += '</div>';
@@ -932,6 +990,7 @@
                     sessionStats.entryPointsAdded = 0;
                     sessionStats.lockLevelsFixed = 0;
                     sessionStats.fixedVenueIds.clear();
+                    sessionStats.pendingChanges = 0;
                     console.log('Session stats reset');
                     displayUI(currentViewCount);
                 }

@@ -1,6 +1,6 @@
 # WME RPP Auto-Fixer - Complete Guide
 
-**Current Version**: 3.10.2
+**Current Version**: 3.11.0
 
 ## Overview
 
@@ -52,7 +52,7 @@ etc.
 Open Tampermonkey dashboard and **disable** "WME RPP Checks (No Iteration)"
 
 ### 2. Install New Script
-1. Open the file: `wme-rpp-auto-fixer-v3.10.2.user.js`
+1. Open the file: `wme-rpp-auto-fixer-v3.11.0.user.js`
 2. Copy all contents
 3. Open Tampermonkey → Click "+" to create new script
 4. Paste the code
@@ -123,7 +123,40 @@ Estimated time remaining: 3m 45s
 - **⏸️ Pause Scan** - Temporarily pause (you can resume from same spot)
 - **⏹️ Stop Scan** - Cancel and return to original position
 
-#### Step 4: Save Changes
+#### Step 4: Auto-Pause at 100 Changes (NEW in v3.11.0)
+**Important WME Performance Protection:**
+
+WME becomes very slow when more than 100 changes are pending save. To prevent performance issues, the script now:
+
+1. **Automatically pauses** when you reach 100 pending changes
+2. **Alerts you** to save your changes:
+   ```
+   ⚠️ You have 100 changes pending!
+
+   WME slows down with more than 100 pending changes.
+
+   Please click Save to continue scanning.
+   ```
+3. **Monitors for save completion** - When you click WME's Save button
+4. **Automatically resumes** scanning after a 1-second delay
+
+**What You'll See:**
+- Session Statistics shows: `Pending changes: 85 / 100` (in orange when ≥80)
+- Color coding:
+  - **Black**: 0-79 changes (safe)
+  - **Orange**: 80-99 changes (warning)
+  - **Red/Bold**: 100+ changes (limit reached)
+
+**Your Action:**
+1. Script pauses automatically at 100 changes
+2. Click WME's **Save** button (top toolbar)
+3. Wait for save to complete
+4. Script automatically resumes scanning
+5. Counter resets to 0
+
+**No manual intervention needed** - Just save when prompted and the scan continues automatically!
+
+#### Step 5: Save Changes
 1. When scan completes, check **Session Statistics**
 2. Click WME's **Save** button to save all fixes
 3. Map returns to original position and zoom
@@ -156,7 +189,9 @@ Session Statistics:
 • Total Fixed: 23
 • Entry Points Added: 15
 • Lock Levels Fixed: 18
+• Pending changes: 15 / 100
 ```
+(Pending changes shows in orange when ≥80, red/bold when ≥100)
 
 ### Control Buttons
 - **⏸️ Pause Auto-Fix** / **▶️ Resume Auto-Fix** - Control manual mode
@@ -172,7 +207,7 @@ Session Statistics:
 The script logs all actions to the console (F12 → Console):
 
 ```
-Script loaded: WME RPP Auto-Fixer v3.10.2 - Scan Zoom 19
+Script loaded: WME RPP Auto-Fixer v3.11.0 - Auto-pause at 100 changes
 Merge complete, scanning tile...
 Scan: 4 RPPs visible, 0 already fixed this session
 ✅ Added entry point for: 123 Main St
