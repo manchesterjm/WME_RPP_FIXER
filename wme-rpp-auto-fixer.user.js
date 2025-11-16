@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      3.10.1
+// @version      3.10.2
 // @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if it's 1 or 2. Includes automatic map scanning with ETA!
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
@@ -10,7 +10,7 @@
 
 /*
  * WME RPP Auto-Fixer
- * Version: 3.10.1
+ * Version: 3.10.2
  *
  * OVERVIEW:
  * This script automatically fixes Residential Place Points (RPPs) in the Waze Map Editor.
@@ -47,7 +47,7 @@
 (function() {
     'use strict';
 
-    console.log('Script loaded: WME RPP Auto-Fixer v3.10.1 - Scan Zoom 17');
+    console.log('Script loaded: WME RPP Auto-Fixer v3.10.2 - Scan Zoom 19');
 
     // ============================================================================
     // CLASSES
@@ -131,7 +131,7 @@
     // ============================================================================
 
     // Scanner constants (inspired by WME Validator)
-    const SCAN_ZOOM = 17;                    // Zoom level for scanning (17 = balanced tile size for thorough RPP detection)
+    const SCAN_ZOOM = 19;                    // Zoom level for scanning (19 = very zoomed in, small tiles, fast loading)
     const SCAN_OVERLAP = 0.1;                // 10% overlap between adjacent tiles to ensure no RPPs are missed at boundaries
     const SCAN_DELAY_MS = 500;               // Delay after mergeend event before moving to next tile (ms)
     const SCAN_ZOOM_WAIT_MS = 500;           // Wait time for zoom operation to complete (ms)
