@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      3.8.0
+// @version      3.9.0
 // @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if it's 1 or 2. Includes automatic map scanning with ETA!
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
@@ -10,7 +10,7 @@
 
 /*
  * WME RPP Auto-Fixer
- * Version: 3.8.0
+ * Version: 3.9.0
  *
  * OVERVIEW:
  * This script automatically fixes Residential Place Points (RPPs) in the Waze Map Editor.
@@ -47,7 +47,7 @@
 (function() {
     'use strict';
 
-    console.log("Script loaded: WME RPP Auto-Fixer v3.8.0 - Code Quality Improvements");
+    console.log('Script loaded: WME RPP Auto-Fixer v3.8.0 - Code Quality Improvements');
 
     // ============================================================================
     // CLASSES
@@ -68,7 +68,7 @@
             this._entry = true;    // Allow entry to RPP from this point
             this._exit = true;     // Allow exit from RPP to this point
             this._isPrimary = true; // Mark as primary navigation point
-            this._name = "";       // Optional name for the nav point
+            this._name = '';       // Optional name for the nav point
         }
 
         /**
@@ -141,7 +141,7 @@
 
     // RPP Fix constants
     const LOCK_LEVEL_3 = 2;                  // WME lock rank value for Level 3 (0-indexed, displays as "3" in UI)
-    const RPP_CATEGORY = "RESIDENCE_HOME";   // WME category identifier for Residential Place Points
+    const RPP_CATEGORY = 'RESIDENCE_HOME';   // WME category identifier for Residential Place Points
 
     // Scanner state constants
     const STATE_STOPPED = 'stopped';         // Scanner is not running
@@ -159,7 +159,7 @@
     let autoFixEnabled = true;  // Whether to automatically fix RPPs when found
 
     // Session statistics
-    let sessionStats = {
+    const sessionStats = {
         totalFixed: 0,           // Total number of RPPs fixed this session
         entryPointsAdded: 0,     // How many RPPs needed entry points added
         lockLevelsFixed: 0,      // How many RPPs needed lock level changed
@@ -171,7 +171,7 @@
     let uiUpdateTimeout = null;     // Timeout ID for scheduled UI update
 
     // Scanner state
-    let scannerState = {
+    const scannerState = {
         status: STATE_STOPPED,         // Current scanner status
         startExtent: null,              // Original map extent when scan started
         startCenter: null,              // Original map center when scan started
@@ -203,10 +203,10 @@
      * @function initializeScript
      */
     function initializeScript() {
-        console.log("initializeScript: Start");
+        console.log('initializeScript: Start');
         try {
             // Register a new sidebar tab in WME
-            const { tabLabel, tabPane } = W.userscripts.registerSidebarTab("rpp-auto-fixer");
+            const { tabLabel, tabPane } = W.userscripts.registerSidebarTab('rpp-auto-fixer');
             tabLabel.innerText = '🔧 RPP Fix';
             tabLabel.title = 'Auto-Fix RPPs: Automatically fixes as you pan around';
             tabPane.innerHTML = '<h2>Loading...</h2>';
@@ -219,15 +219,15 @@
                 W.model.events.on({'mergeend': onMergeEnd});
 
                 // Also scan when WME becomes ready
-                document.addEventListener("wme-ready", scanAndFixRPPs);
+                document.addEventListener('wme-ready', scanAndFixRPPs);
 
                 // Perform initial scan
                 scanAndFixRPPs();
             });
 
-            console.log("initializeScript: Done");
+            console.log('initializeScript: Done');
         } catch (err) {
-            console.error("initializeScript: error:", err);
+            console.error('initializeScript: error:', err);
         }
     }
 
@@ -258,7 +258,7 @@
             // Set flag to prevent duplicate scans (mergeend can fire multiple times)
             scannerState.scanningCurrentTile = true;
 
-            console.log("Merge complete, scanning tile...");
+            console.log('Merge complete, scanning tile...');
 
             // Scan immediately - data is ready!
             scanAndFixRPPs();
@@ -294,13 +294,13 @@
         try {
             // Validate UI is ready
             if (!tabPaneRef) {
-                console.error("scanAndFixRPPs: tabPaneRef is null, abort.");
+                console.error('scanAndFixRPPs: tabPaneRef is null, abort.');
                 return;
             }
 
             // Validate WME venue model is ready
             if (!W.model?.venues) {
-                console.error("scanAndFixRPPs: W.model.venues not ready.");
+                console.error('scanAndFixRPPs: W.model.venues not ready.');
                 tabPaneRef.innerHTML = '<p>Error: WME data not ready.</p>';
                 return;
             }
@@ -340,8 +340,12 @@
                         fixedThisScan++;
 
                         // Update specific fix counts
-                        if (needsEntryPoint) sessionStats.entryPointsAdded++;
-                        if (needsLockFix) sessionStats.lockLevelsFixed++;
+                        if (needsEntryPoint) {
+                            sessionStats.entryPointsAdded++;
+                        }
+                        if (needsLockFix) {
+                            sessionStats.lockLevelsFixed++;
+                        }
                     }
                 });
 
@@ -353,7 +357,7 @@
             // Update UI with current RPP count
             displayUI(allRPPs.length);
         } catch (err) {
-            console.error("scanAndFixRPPs: error:", err);
+            console.error('scanAndFixRPPs: error:', err);
             tabPaneRef.innerHTML = '<p>Error scanning RPPs.</p>';
         }
     }
@@ -410,7 +414,7 @@
                 console.log(`✅ Set lock level 3 for: ${address}`);
             }
         } catch (err) {
-            console.error("fixRPP: error:", err);
+            console.error('fixRPP: error:', err);
         }
     }
 
@@ -433,7 +437,9 @@
      */
     function turnLayersOff() {
         try {
-            if (scannerState.layersVisibility) return; // Already off
+            if (scannerState.layersVisibility) {
+                return;
+            } // Already off
 
             scannerState.layersVisibility = '';
             const layers = W.map.olMap.layers;
@@ -451,9 +457,9 @@
                 }
             });
 
-            console.log("Map layers turned off for faster scanning");
+            console.log('Map layers turned off for faster scanning');
         } catch (err) {
-            console.error("turnLayersOff: error:", err);
+            console.error('turnLayersOff: error:', err);
         }
     }
 
@@ -467,7 +473,9 @@
      */
     function turnLayersOn() {
         try {
-            if (!scannerState.layersVisibility) return; // Nothing to restore
+            if (!scannerState.layersVisibility) {
+                return;
+            } // Nothing to restore
 
             const layers = W.map.olMap.layers;
             let j = 0;
@@ -482,9 +490,9 @@
             });
 
             scannerState.layersVisibility = '';
-            console.log("Map layers restored");
+            console.log('Map layers restored');
         } catch (err) {
-            console.error("turnLayersOn: error:", err);
+            console.error('turnLayersOn: error:', err);
         }
     }
 
@@ -511,7 +519,7 @@
      */
     function startScanning() {
         try {
-            console.log("Starting automatic scan...");
+            console.log('Starting automatic scan...');
 
             // Turn off map layers to speed up venue data loading
             turnLayersOff();
@@ -569,7 +577,7 @@
                 forceUIUpdate(0); // Force immediate update
             }, SCAN_ZOOM_WAIT_MS);
         } catch (err) {
-            console.error("startScanning: error:", err);
+            console.error('startScanning: error:', err);
         }
     }
 
@@ -589,7 +597,9 @@
      * @function moveToNextScanPosition
      */
     function moveToNextScanPosition() {
-        if (scannerState.status !== STATE_RUNNING) return;
+        if (scannerState.status !== STATE_RUNNING) {
+            return;
+        }
 
         try {
             const s = scannerState.startExtent;
@@ -616,7 +626,7 @@
 
             // Check if we've scanned all rows (scan complete!)
             if (row >= scannerState.totalRows) {
-                console.log("✅ Scan complete!");
+                console.log('✅ Scan complete!');
                 stopScanning();
                 alert(`Scan complete!\n\n${sessionStats.totalFixed} RPPs fixed.\n\nDon't forget to click Save!`);
                 return;
@@ -640,7 +650,7 @@
 
             scheduleUIUpdate(0); // Use throttled update during scanning
         } catch (err) {
-            console.error("moveToNextScanPosition: error:", err);
+            console.error('moveToNextScanPosition: error:', err);
             stopScanning();
         }
     }
@@ -654,7 +664,7 @@
      * @function pauseScanning
      */
     function pauseScanning() {
-        console.log("Pausing scan...");
+        console.log('Pausing scan...');
         scannerState.status = STATE_PAUSED;
         turnLayersOn(); // Restore layers when pausing
         forceUIUpdate(0); // Force immediate update, cancel any pending
@@ -669,7 +679,7 @@
      * @function resumeScanning
      */
     function resumeScanning() {
-        console.log("Resuming scan...");
+        console.log('Resuming scan...');
         scannerState.status = STATE_RUNNING;
         turnLayersOff(); // Turn layers back off when resuming
         forceUIUpdate(0); // Force immediate update, cancel any pending
@@ -685,7 +695,7 @@
      * @function stopScanning
      */
     function stopScanning() {
-        console.log("Stopping scan...");
+        console.log('Stopping scan...');
 
         // Restore map layers
         turnLayersOn();
@@ -719,7 +729,9 @@
      * @param {number} currentViewCount - Number of RPPs in current view
      */
     function scheduleUIUpdate(currentViewCount) {
-        if (uiUpdateScheduled) return; // Already scheduled, skip
+        if (uiUpdateScheduled) {
+            return;
+        } // Already scheduled, skip
 
         uiUpdateScheduled = true;
         uiUpdateTimeout = setTimeout(() => {
@@ -765,7 +777,7 @@
      * @param {number} currentViewCount - Number of RPPs currently visible
      */
     function displayUI(currentViewCount) {
-        console.log("displayUI: Building UI...");
+        console.log('displayUI: Building UI...');
 
         let html = '<div style="padding: 10px;">';
         html += '<h2>🔧 RPP Auto-Fixer</h2>';
@@ -868,22 +880,30 @@
         // Note: Event listeners must be re-attached after each HTML rebuild
 
         const startScanBtn = document.getElementById('rpp-start-scan-btn');
-        if (startScanBtn) startScanBtn.addEventListener('click', startScanning);
+        if (startScanBtn) {
+            startScanBtn.addEventListener('click', startScanning);
+        }
 
         const pauseScanBtn = document.getElementById('rpp-pause-scan-btn');
-        if (pauseScanBtn) pauseScanBtn.addEventListener('click', pauseScanning);
+        if (pauseScanBtn) {
+            pauseScanBtn.addEventListener('click', pauseScanning);
+        }
 
         const resumeScanBtn = document.getElementById('rpp-resume-scan-btn');
-        if (resumeScanBtn) resumeScanBtn.addEventListener('click', resumeScanning);
+        if (resumeScanBtn) {
+            resumeScanBtn.addEventListener('click', resumeScanning);
+        }
 
         const stopScanBtn = document.getElementById('rpp-stop-scan-btn');
-        if (stopScanBtn) stopScanBtn.addEventListener('click', stopScanning);
+        if (stopScanBtn) {
+            stopScanBtn.addEventListener('click', stopScanning);
+        }
 
         const pauseBtn = document.getElementById('rpp-pause-btn');
         if (pauseBtn) {
             pauseBtn.addEventListener('click', () => {
                 autoFixEnabled = false;
-                console.log("Auto-fix PAUSED");
+                console.log('Auto-fix PAUSED');
                 displayUI(currentViewCount);
             });
         }
@@ -892,7 +912,7 @@
         if (resumeBtn) {
             resumeBtn.addEventListener('click', () => {
                 autoFixEnabled = true;
-                console.log("Auto-fix RESUMED");
+                console.log('Auto-fix RESUMED');
                 scanAndFixRPPs();
             });
         }
@@ -905,7 +925,7 @@
                     sessionStats.entryPointsAdded = 0;
                     sessionStats.lockLevelsFixed = 0;
                     sessionStats.fixedVenueIds.clear();
-                    console.log("Session stats reset");
+                    console.log('Session stats reset');
                     displayUI(currentViewCount);
                 }
             });
@@ -928,10 +948,12 @@
      * @returns {string} Formatted address or "No Address"
      */
     function getStreetAddress(venue) {
-        if (!venue?.attributes) return "No Address";
+        if (!venue?.attributes) {
+            return 'No Address';
+        }
 
-        const houseNum = venue.attributes.houseNumber || "";
-        let streetName = "";
+        const houseNum = venue.attributes.houseNumber || '';
+        let streetName = '';
 
         // Look up street name from street ID
         if (venue.attributes.streetID) {
@@ -943,10 +965,14 @@
 
         // Combine parts
         const parts = [];
-        if (houseNum.trim()) parts.push(houseNum.trim());
-        if (streetName.trim()) parts.push(streetName.trim());
+        if (houseNum.trim()) {
+            parts.push(houseNum.trim());
+        }
+        if (streetName.trim()) {
+            parts.push(streetName.trim());
+        }
 
-        return parts.join(" ") || "No Address";
+        return parts.join(' ') || 'No Address';
     }
 
     /**
@@ -969,11 +995,17 @@
         const seconds = totalSeconds % 60;
 
         const parts = [];
-        if (hours > 0) parts.push(`${hours}h`);
-        if (minutes > 0) parts.push(`${minutes}m`);
-        if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+        if (hours > 0) {
+            parts.push(`${hours}h`);
+        }
+        if (minutes > 0) {
+            parts.push(`${minutes}m`);
+        }
+        if (seconds > 0 || parts.length === 0) {
+            parts.push(`${seconds}s`);
+        }
 
-        return parts.join(" ");
+        return parts.join(' ');
     }
 
     // ============================================================================
@@ -984,6 +1016,6 @@
     if (W?.userscripts?.state.isReady) {
         initializeScript();
     } else {
-        document.addEventListener("wme-ready", initializeScript, { once: true });
+        document.addEventListener('wme-ready', initializeScript, { once: true });
     }
 })();

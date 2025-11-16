@@ -163,7 +163,9 @@ console.log('Prototype methods:', Object.getOwnPropertyNames(UpdateObject.protot
 // 10. DEEP OBJECT EXPLORER FUNCTION
 // ============================================
 function deepExplore(obj, path = '', maxDepth = 2, currentDepth = 0) {
-    if (currentDepth >= maxDepth || !obj) return;
+    if (currentDepth >= maxDepth || !obj) {
+        return;
+    }
 
     const indent = '  '.repeat(currentDepth);
 

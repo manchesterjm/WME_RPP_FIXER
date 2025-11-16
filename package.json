@@ -1,0 +1,26 @@
+{
+  "name": "wme",
+  "version": "1.0.0",
+  "description": "This folder contains a comprehensive collection of WME (Waze Map Editor) scripts and learning materials for developing your own WME UserScripts.",
+  "main": "console-discovery-snippets.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint *.js",
+    "lint:fix": "eslint *.js --fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manchesterjm/WME_RPP_FIXER.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/manchesterjm/WME_RPP_FIXER/issues"
+  },
+  "homepage": "https://github.com/manchesterjm/WME_RPP_FIXER#readme",
+  "devDependencies": {
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0"
+  }
+}

@@ -49,7 +49,9 @@
 
             for (const prop of props) {
                 // Skip private/internal properties
-                if (prop.startsWith('_') || prop.startsWith('$')) continue;
+                if (prop.startsWith('_') || prop.startsWith('$')) {
+                    continue;
+                }
 
                 const fullPath = path ? `${path}.${prop}` : prop;
 
@@ -210,7 +212,9 @@
         // Format each section
         ['W', 'model', 'controllers', 'map', 'actionManager', 'selectionManager'].forEach(section => {
             const data = discovery[section];
-            if (!data) return;
+            if (!data) {
+                return;
+            }
 
             output += `\n=== ${section.toUpperCase()} ===\n`;
 

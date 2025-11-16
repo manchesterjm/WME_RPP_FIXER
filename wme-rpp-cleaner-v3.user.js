@@ -163,7 +163,7 @@
             $button.prop('disabled', true);
         } else {
             $status.html(
-                `<strong style="color: orange;">⚠ RPP needs cleaning</strong><br>` +
+                '<strong style="color: orange;">⚠ RPP needs cleaning</strong><br>' +
                 `<small>${issues.join('<br>')}</small>`
             );
             $button.prop('disabled', false);
