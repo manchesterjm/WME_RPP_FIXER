@@ -478,7 +478,8 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
 | 3.10.1 | Zoom 17 experiment | ⚠️ Reverted |
 | 3.10.2 | Zoom 19 restored | ✅ Stable |
 | 3.11.0 | Auto-pause at 100 changes | ✅ Performance protection |
-| 3.12.0 | RPP tracking & scan duration | ✅ Current version |
+| 3.12.0 | RPP tracking & scan duration | ✅ Analytics |
+| 3.12.1 | Progress bar snake fix | ✅ Current version |
 
 ---
 
@@ -554,7 +555,7 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
   - Bold text when approaching/at limit
 - **User Experience**: Seamless workflow - scan pauses at 100, user saves, scan auto-resumes
 
-### Version 3.12.0 - RPP Count Tracking & Scan Duration (Current)
+### Version 3.12.0 - RPP Count Tracking & Scan Duration
 **Added**: Track total RPPs seen and display scan duration
 - **New Statistics**:
   - `sessionStats.totalRPPsSeen` - Total number of RPPs encountered during scan (fixed + already good)
@@ -572,6 +573,16 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
   - Only displays after first scan completes
   - Persists across scans until stats are reset
 - **User Benefit**: Better understanding of scan coverage and performance
+
+### Version 3.12.1 - Progress Bar Snake Pattern Fix (Current)
+**Fixed**: Progress bar now correctly increases throughout entire scan
+- **Bug**: Progress percentage would decrease when scanning right-to-left rows
+- **Root Cause**: Progress calculation didn't account for snake pattern direction
+- **Solution**: Added direction-aware tile counting
+  - Left-to-right rows (direction = 1): `tilesCompleted = currentCol`
+  - Right-to-left rows (direction = -1): `tilesCompleted = totalCols - currentCol - 1`
+- **Result**: Progress bar now smoothly increases from 0% to 100% regardless of scan direction
+- **Code Location**: wme-rpp-auto-fixer-v3.12.1.user.js:873-882
 - Current active version
 
 ### Infrastructure Improvements
@@ -590,9 +601,9 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
 
 ## Conclusion
 
-Successfully transformed the script from manual-only (v3.0.0) to a fully-featured, production-ready auto-fixer (v3.12.0). The journey involved:
-- 19 version iterations
-- Fixing 5 major bugs
+Successfully transformed the script from manual-only (v3.0.0) to a fully-featured, production-ready auto-fixer (v3.12.1). The journey involved:
+- 20 version iterations
+- Fixing 6 major bugs
 - Learning WME's modern API
 - Understanding event-driven architecture
 - Optimizing for performance
