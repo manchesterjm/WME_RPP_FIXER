@@ -14,7 +14,8 @@
       "Bash(git commit:*)",
       "Bash(node --version:*)",
       "Bash(npm:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(git mv:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,9 +1,0 @@
-https://greasyfork.org/en/scripts/28690-wme-place-harmonizer/code
-https://greasyfork.org/en/scripts/435828-wme-fix-ui-memorial-edition/code
-https://greasyfork.org/en/scripts/369632-wme-gis-layers/code
-https://greasyfork.org/en/scripts/390565-wme-hn-navpoints/code
-https://greasyfork.org/en/scripts/374292-wme-norm-name/code
-https://greasyfork.org/en/scripts/26340-wme-place-interface-enhancements/code
-https://greasyfork.org/en/scripts/458651-wme-quick-hn-daveacincy-fork/code
-https://greasyfork.org/en/scripts/13774-wme-speedhelper/code
-https://greasyfork.org/en/scripts/27604-wme-wazebar/code
