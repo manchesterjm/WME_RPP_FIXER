@@ -19,16 +19,16 @@ This folder contains backup copies of every version of the WME RPP Auto-Fixer sc
 
 To restore a previous version:
 1. Copy the desired backup file
-2. Rename it to `wme-rpp-auto-fixer.user.js`
-3. Replace the main script file
-4. Reinstall in Tampermonkey if needed
+2. Use it as the main file (already has version in filename)
+3. Install/reinstall in Tampermonkey
 
 ## Backup Process
 
 When creating a new version:
 1. Copy current version to `backups/wme-rpp-auto-fixer-v{CURRENT_VERSION}.user.js`
-2. Make changes to main file
-3. Update version number in main file
-4. Commit both files to git
+2. Rename main file to `wme-rpp-auto-fixer-v{NEW_VERSION}.user.js`
+3. Make changes to main file
+4. Update version number in main file
+5. Commit both files to git
 
 This ensures we can always roll back to any previous version if needed.
