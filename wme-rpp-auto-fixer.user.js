@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      3.9.0
+// @version      3.10.0
 // @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if it's 1 or 2. Includes automatic map scanning with ETA!
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
@@ -10,7 +10,7 @@
 
 /*
  * WME RPP Auto-Fixer
- * Version: 3.9.0
+ * Version: 3.10.0
  *
  * OVERVIEW:
  * This script automatically fixes Residential Place Points (RPPs) in the Waze Map Editor.
@@ -47,7 +47,7 @@
 (function() {
     'use strict';
 
-    console.log('Script loaded: WME RPP Auto-Fixer v3.8.0 - Code Quality Improvements');
+    console.log('Script loaded: WME RPP Auto-Fixer v3.10.0 - Visual Progress Bar');
 
     // ============================================================================
     // CLASSES
@@ -805,7 +805,14 @@
             const tilesCompleted = scannerState.currentRow * scannerState.totalCols + scannerState.currentCol;
             const totalTiles = scannerState.totalRows * scannerState.totalCols;
             const progress = (tilesCompleted / totalTiles * 100).toFixed(1);
-            html += `<p style="margin: 5px 0; font-size: 12px;">Progress: ${progress}%</p>`;
+
+            // Progress bar with cyan blue fill
+            html += '<div style="margin: 10px 0 5px 0;">';
+            html += '  <div style="position: relative; width: 100%; height: 30px; background: white; border: 2px solid #999; border-radius: 6px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);">';
+            html += `    <div style="position: absolute; top: 0; left: 0; height: 100%; width: ${progress}%; background: linear-gradient(90deg, #00bcd4 0%, #00acc1 100%); transition: width 0.3s ease;"></div>`;
+            html += `    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #333; font-size: 14px; text-shadow: 0 0 3px white;">${progress}%</div>`;
+            html += '  </div>';
+            html += '</div>';
 
             // Calculate and display estimated time remaining
             if (scannerState.startTime && tilesCompleted > 0 && isRunning) {
