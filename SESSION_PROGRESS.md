@@ -476,8 +476,9 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
 | 3.9.0 | ESLint integration | ✅ Automated linting |
 | 3.10.0 | Visual progress bar | ✅ Better UI feedback |
 | 3.10.1 | Zoom 17 experiment | ⚠️ Reverted |
-| 3.10.2 | Zoom 19 restored | ✅ Previous version |
-| 3.11.0 | Auto-pause at 100 changes | ✅ Current version |
+| 3.10.2 | Zoom 19 restored | ✅ Stable |
+| 3.11.0 | Auto-pause at 100 changes | ✅ Performance protection |
+| 3.12.0 | RPP tracking & scan duration | ✅ Current version |
 
 ---
 
@@ -552,6 +553,25 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
   - Color-coded warnings (orange at 80+, red at 100)
   - Bold text when approaching/at limit
 - **User Experience**: Seamless workflow - scan pauses at 100, user saves, scan auto-resumes
+
+### Version 3.12.0 - RPP Count Tracking & Scan Duration (Current)
+**Added**: Track total RPPs seen and display scan duration
+- **New Statistics**:
+  - `sessionStats.totalRPPsSeen` - Total number of RPPs encountered during scan (fixed + already good)
+  - `sessionStats.lastScanDuration` - Duration of last completed scan in milliseconds
+- **Tracking Logic**:
+  - Increments totalRPPsSeen for each RPP found during auto-scan (not manual mode)
+  - Resets counter at start of each new scan
+  - Calculates duration from scan start to completion
+- **Enhanced Scan Completion Alert**:
+  - Shows scan duration in human-readable format (e.g., "5m 30s")
+  - Shows total RPPs seen during scan
+  - Shows RPPs fixed during scan
+- **UI Enhancements**:
+  - Session Statistics now shows "Last Scan: X RPPs seen, completed in Y"
+  - Only displays after first scan completes
+  - Persists across scans until stats are reset
+- **User Benefit**: Better understanding of scan coverage and performance
 - Current active version
 
 ### Infrastructure Improvements
@@ -570,8 +590,8 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
 
 ## Conclusion
 
-Successfully transformed the script from manual-only (v3.0.0) to a fully-featured, production-ready auto-fixer (v3.11.0). The journey involved:
-- 18 version iterations
+Successfully transformed the script from manual-only (v3.0.0) to a fully-featured, production-ready auto-fixer (v3.12.0). The journey involved:
+- 19 version iterations
 - Fixing 5 major bugs
 - Learning WME's modern API
 - Understanding event-driven architecture
@@ -580,5 +600,6 @@ Successfully transformed the script from manual-only (v3.0.0) to a fully-feature
 - Adding automated quality checks
 - Enhancing user experience with visual feedback
 - Implementing WME performance limit protection
+- Adding comprehensive scan analytics
 
-Final result: **~8x faster** than v3.5.1 with professional code quality, automated linting, visual progress tracking, auto-pause at WME's performance limit (100 changes), and comprehensive version control.
+Final result: **~8x faster** than v3.5.1 with professional code quality, automated linting, visual progress tracking, auto-pause at WME's performance limit (100 changes), scan duration tracking, RPP count analytics, and comprehensive version control.

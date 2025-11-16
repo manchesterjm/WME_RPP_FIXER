@@ -1,6 +1,6 @@
 # WME RPP Auto-Fixer - Complete Guide
 
-**Current Version**: 3.11.0
+**Current Version**: 3.12.0
 
 ## Overview
 
@@ -52,7 +52,7 @@ etc.
 Open Tampermonkey dashboard and **disable** "WME RPP Checks (No Iteration)"
 
 ### 2. Install New Script
-1. Open the file: `wme-rpp-auto-fixer-v3.11.0.user.js`
+1. Open the file: `wme-rpp-auto-fixer-v3.12.0.user.js`
 2. Copy all contents
 3. Open Tampermonkey → Click "+" to create new script
 4. Paste the code
@@ -156,8 +156,24 @@ WME becomes very slow when more than 100 changes are pending save. To prevent pe
 
 **No manual intervention needed** - Just save when prompted and the scan continues automatically!
 
-#### Step 5: Save Changes
-1. When scan completes, check **Session Statistics**
+#### Step 5: Scan Completion (NEW in v3.12.0)
+When the scan finishes, you'll see a completion alert:
+```
+Scan complete!
+
+Scan duration: 3m 45s
+Total RPPs seen: 847
+RPPs fixed: 23
+
+Don't forget to click Save!
+```
+
+The scan statistics will also appear in the Session Statistics box showing:
+- How many RPPs were encountered during the scan
+- How long the scan took to complete
+
+#### Step 6: Save Changes
+1. After scan completes, check **Session Statistics**
 2. Click WME's **Save** button to save all fixes
 3. Map returns to original position and zoom
 
@@ -190,8 +206,13 @@ Session Statistics:
 • Entry Points Added: 15
 • Lock Levels Fixed: 18
 • Pending changes: 15 / 100
+
+Last Scan: 847 RPPs seen, completed in 3m 45s
+
+Current view: 12 RPPs
 ```
-(Pending changes shows in orange when ≥80, red/bold when ≥100)
+- Pending changes shows in orange when ≥80, red/bold when ≥100
+- Last Scan stats only appear after completing an auto-scan
 
 ### Control Buttons
 - **⏸️ Pause Auto-Fix** / **▶️ Resume Auto-Fix** - Control manual mode
@@ -207,7 +228,7 @@ Session Statistics:
 The script logs all actions to the console (F12 → Console):
 
 ```
-Script loaded: WME RPP Auto-Fixer v3.11.0 - Auto-pause at 100 changes
+Script loaded: WME RPP Auto-Fixer v3.12.0 - RPP tracking & scan duration
 Merge complete, scanning tile...
 Scan: 4 RPPs visible, 0 already fixed this session
 ✅ Added entry point for: 123 Main St
