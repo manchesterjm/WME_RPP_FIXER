@@ -1,0 +1,23 @@
+# Backup files
+*.zip
+
+# Large WME source files
+wme.txt
+
+# API discovery output files (keep the scripts, not the huge outputs)
+wme-api-discovery.json
+wme-api-discovery.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node modules (if any)
+node_modules/
