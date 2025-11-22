@@ -2,7 +2,7 @@
 
 A Tampermonkey userscript that automatically fixes Residential Place Points (RPPs) in Waze Map Editor.
 
-## Current Version: 3.13.2
+## Current Version: 3.13.3
 
 ### Key Features
 
@@ -30,7 +30,7 @@ A Tampermonkey userscript that automatically fixes Residential Place Points (RPP
 ## Installation
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) browser extension
-2. Open `wme-rpp-auto-fixer-v3.13.2.user.js` in this folder
+2. Open `wme-rpp-auto-fixer-v3.13.3.user.js` in this folder
 3. Tampermonkey will prompt to install
 4. Navigate to [Waze Map Editor](https://www.waze.com/editor)
 
@@ -53,7 +53,7 @@ See [../docs/HOW-TO-INSTALL.md](../docs/HOW-TO-INSTALL.md) for detailed installa
 
 ```bash
 npm install
-npx eslint wme-rpp-auto-fixer-v3.13.2.user.js
+npx eslint wme-rpp-auto-fixer-v3.13.3.user.js
 ```
 
 Follow conventions in [../STYLE_GUIDE.md](../STYLE_GUIDE.md)
@@ -62,10 +62,10 @@ Follow conventions in [../STYLE_GUIDE.md](../STYLE_GUIDE.md)
 
 | Version | Feature | Status |
 |---------|---------|--------|
-| 3.13.2 | Configurable lock level dropdown (for different states) | ✅ Current |
+| 3.13.3 | CRITICAL FIX: Duplicate UpdateObject bug, changes now appear in save queue | ✅ Current |
+| 3.13.2 | Configurable lock level dropdown (for different states) | ✅ Stable |
 | 3.13.1 | Bug fixes: save counter, zoom check, RPP tracking | ✅ Stable |
 | 3.13.0 | Address validation & deletion | ✅ Stable |
-| 3.12.1 | Progress bar snake fix | ✅ Stable |
 
 See SESSION_PROGRESS.md for complete version history.
 
