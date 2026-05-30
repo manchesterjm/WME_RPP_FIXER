@@ -8,6 +8,9 @@ wme.txt
 wme-api-discovery.json
 wme-api-discovery.txt
 
+# Local Claude pointer (machine-specific paths — keep out of the public repo)
+CLAUDE.md
+
 # OS files
 .DS_Store
 Thumbs.db
