@@ -45,7 +45,7 @@ module.exports = [
             }],
             'prefer-const': 'warn',
             'no-var': 'error',
-            'eqeqeq': ['error', 'always'],
+            'eqeqeq': ['error', 'always', { null: 'ignore' }],
             'curly': ['error', 'all'],
             'brace-style': ['error', '1tbs'],
             'space-before-function-paren': ['error', {
