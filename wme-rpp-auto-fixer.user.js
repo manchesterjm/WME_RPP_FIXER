@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      4.5.2
-// @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if 1 or 2, and HIGHLIGHTS RPPs with no address for manual review (deletion is never automatic). v4.1: optional city-fix against USPS preferred names (CO only, opt-in). v4.1.1: retarget RPP in same scan as add_alt. v4.1.2: configurable max-segment-distance (default 300m for rural). v4.1.7: write city-fix names in WME title case (reuse existing city) instead of raw USPS upper case. v4.5.1: CRITICAL FIX — never treat an RPP whose street isn't loaded yet as addressless (a load race on pan was deleting well-addressed RPPs); addressless RPPs are now FLAGGED-ONLY (highlight) and deleted by hand, never auto-deleted. v4.5.2: SKIP RPPs whose street isn't loaded yet entirely (no fix/flag) so the city-fix can't retarget them to the wrong street; city-fix now refuses to change the street name (city only); added rppAutoFixerDebug() console tracing.
+// @version      4.5.3
+// @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if 1 or 2, and HIGHLIGHTS RPPs with no address for manual review (deletion is never automatic). v4.1: optional city-fix against USPS preferred names (CO only, opt-in). v4.1.1: retarget RPP in same scan as add_alt. v4.1.2: configurable max-segment-distance (default 300m for rural). v4.1.7: write city-fix names in WME title case (reuse existing city) instead of raw USPS upper case. v4.5.1: CRITICAL FIX — never treat an RPP whose street isn't loaded yet as addressless (a load race on pan was deleting well-addressed RPPs); addressless RPPs are now FLAGGED-ONLY (highlight) and deleted by hand, never auto-deleted. v4.5.2: SKIP RPPs whose street isn't loaded yet entirely (no fix/flag) so the city-fix can't retarget them to the wrong street; city-fix now refuses to change the street name (city only); added rppAutoFixerDebug() console tracing. v4.5.3: debug tracing defaults OFF (re-enable with rppAutoFixerDebug(true)).
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
 // @updateURL    file:///C:/Users/manch/Desktop/WME/RPP-Auto-Fixer/wme-rpp-auto-fixer.user.js
@@ -110,17 +110,18 @@
     'use strict';
 
     /** Script version — single source of truth (also referenced in displayUI sidebar header). */
-    const SCRIPT_VERSION = '4.5.2';
+    const SCRIPT_VERSION = '4.5.3';
 
     console.log(`🏠 WME RPP Auto-Fixer v${SCRIPT_VERSION} loaded`);
 
-    // ── Diagnostic logging (v4.5.2) ──────────────────────────────────────────
+    // ── Diagnostic logging ───────────────────────────────────────────────────
     // Verbose per-event / per-RPP tracing to debug load-race interactions (e.g.
     // with the GIS Probe). Every line is tagged "[RPP-DBG]" so it can be filtered
-    // in the console. Toggle live: rppAutoFixerDebug(true|false). GM-persisted;
-    // defaults ON in this diagnostic build — turn it off once we're satisfied.
+    // in the console. Toggle live: rppAutoFixerDebug(true|false). GM-persisted, so
+    // it survives reloads. Default OFF (v4.5.3) — turn it on when we need to trace
+    // a misbehavior again. (It proved the load race in v4.5.2: Deferred=222.)
     const DEBUG_LOG_KEY = 'rppAutoFixer.debugLog';
-    let debugLogEnabled = GM_getValue(DEBUG_LOG_KEY, true);
+    let debugLogEnabled = GM_getValue(DEBUG_LOG_KEY, false);
     function dlog(...args) {
         if (debugLogEnabled) {
             console.log('🏠🔎[RPP-DBG]', ...args);
