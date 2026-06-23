@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      4.5.1
-// @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if 1 or 2, and HIGHLIGHTS RPPs with no address for manual review (deletion is never automatic). v4.1: optional city-fix against USPS preferred names (CO only, opt-in). v4.1.1: retarget RPP in same scan as add_alt. v4.1.2: configurable max-segment-distance (default 300m for rural). v4.1.7: write city-fix names in WME title case (reuse existing city) instead of raw USPS upper case. v4.5.1: CRITICAL FIX — never treat an RPP whose street isn't loaded yet as addressless (a load race on pan was deleting well-addressed RPPs); addressless RPPs are now FLAGGED-ONLY (highlight) and deleted by hand, never auto-deleted.
+// @version      4.5.2
+// @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if 1 or 2, and HIGHLIGHTS RPPs with no address for manual review (deletion is never automatic). v4.1: optional city-fix against USPS preferred names (CO only, opt-in). v4.1.1: retarget RPP in same scan as add_alt. v4.1.2: configurable max-segment-distance (default 300m for rural). v4.1.7: write city-fix names in WME title case (reuse existing city) instead of raw USPS upper case. v4.5.1: CRITICAL FIX — never treat an RPP whose street isn't loaded yet as addressless (a load race on pan was deleting well-addressed RPPs); addressless RPPs are now FLAGGED-ONLY (highlight) and deleted by hand, never auto-deleted. v4.5.2: SKIP RPPs whose street isn't loaded yet entirely (no fix/flag) so the city-fix can't retarget them to the wrong street; city-fix now refuses to change the street name (city only); added rppAutoFixerDebug() console tracing.
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
 // @updateURL    file:///C:/Users/manch/Desktop/WME/RPP-Auto-Fixer/wme-rpp-auto-fixer.user.js
@@ -110,9 +110,28 @@
     'use strict';
 
     /** Script version — single source of truth (also referenced in displayUI sidebar header). */
-    const SCRIPT_VERSION = '4.5.1';
+    const SCRIPT_VERSION = '4.5.2';
 
     console.log(`🏠 WME RPP Auto-Fixer v${SCRIPT_VERSION} loaded`);
+
+    // ── Diagnostic logging (v4.5.2) ──────────────────────────────────────────
+    // Verbose per-event / per-RPP tracing to debug load-race interactions (e.g.
+    // with the GIS Probe). Every line is tagged "[RPP-DBG]" so it can be filtered
+    // in the console. Toggle live: rppAutoFixerDebug(true|false). GM-persisted;
+    // defaults ON in this diagnostic build — turn it off once we're satisfied.
+    const DEBUG_LOG_KEY = 'rppAutoFixer.debugLog';
+    let debugLogEnabled = GM_getValue(DEBUG_LOG_KEY, true);
+    function dlog(...args) {
+        if (debugLogEnabled) {
+            console.log('🏠🔎[RPP-DBG]', ...args);
+        }
+    }
+    window.rppAutoFixerDebug = (on) => {
+        debugLogEnabled = !!on;
+        GM_setValue(DEBUG_LOG_KEY, debugLogEnabled);
+        console.log(`🏠🔎[RPP-DBG] verbose logging ${debugLogEnabled ? 'ON' : 'OFF'}`);
+        return debugLogEnabled;
+    };
 
     /**
      * Official WME SDK handle, bound in initWmeSdk(). Preferred over the legacy
@@ -217,7 +236,8 @@
         totalRPPsSeen: 0,
         lastScanDuration: null,
         recentFixes: [],  // {venueId, address, lat, lon, timestamp} — newest first, capped at MAX_RECENT_FIXES
-        skippedPendingURs: 0
+        skippedPendingURs: 0,
+        skippedStreetUnresolved: 0  // RPP seen but its street wasn't loaded yet → deferred to a later scan
     };
 
     const MAX_RECENT_FIXES = 25;
@@ -353,6 +373,7 @@
         noData: 0,             // skipped: ZIP not in our dataset
         noZip: 0,              // skipped: outside all CO ZCTAs
         skippedSegmentUR: 0,   // skipped: segment has a pending update request
+        skippedWrongStreet: 0, // skipped: nearest segment carries a DIFFERENT street — retarget would change the street, not just the city
     };
 
     function loadCityFixPreference() {
@@ -794,18 +815,35 @@
         const altIDs = near.segment.attributes.streetIDs || [];
         const alts = altIDs.map(cityResolveStreet).filter(Boolean);
         const segmentStreets = [primary, ...alts].filter(Boolean);
+
+        // SAFETY (v4.5.2): city-fix only ever changes the CITY, never the STREET.
+        // If the segment we matched doesn't actually carry the RPP's own street
+        // (e.g. we fell back to a nearest-named segment that is a DIFFERENT road),
+        // bail — retargeting/adding here would change the address to the wrong
+        // street (the "4040 Nonchalant Cir S → N Carefree Cir" corruption class).
+        const rppStreetName = (resolveStreet(rpp).name || '').trim();
+        const rppStreetUpper = rppStreetName.toUpperCase();
+        const sameStreet = (s) => !rppStreetUpper || (s.name || '').trim().toUpperCase() === rppStreetUpper;
+        if (rppStreetUpper && !segmentStreets.some(sameStreet)) {
+            cityStats.skippedWrongStreet++;
+            dlog('city SKIP', rpp.attributes.id, `— nearest segment lacks RPP street "${rppStreetName}" → would change the street, not the city`);
+            return { type: 'skip', reason: 'wrong_street' };
+        }
+
         const valid = new Set([preferred, ...recognized]);
-        const matching = segmentStreets.find(s => s.cityName && valid.has(s.cityName));
+        const matching = segmentStreets.find(s => s.cityName && valid.has(s.cityName) && sameStreet(s));
 
         if (matching) {
+            dlog('city RETARGET', rpp.attributes.id, `keep street "${matching.name}", set city "${matching.cityName}" (streetID=${matching.streetID})`);
             return { type: 'retarget', newStreetID: matching.streetID, cityName: matching.cityName };
         }
-        // Need to add USPS-preferred as an alt on this segment, using the primary
-        // street's NAME (that's the street we're adding a different-city version of).
-        const streetName = primary?.name || '';
+        // Need to add USPS-preferred as an alt on this segment, using the RPP's
+        // OWN street name (the street we're adding a different-city version of).
+        const streetName = rppStreetName || primary?.name || '';
         if (!streetName || (!wmeSdk && !AddAlternateStreet)) {
             return { type: 'skip', reason: 'no_action_available' };
         }
+        dlog('city ADD_ALT', rpp.attributes.id, `street "${streetName}" → add city "${preferred}"`);
         return { type: 'add_alt', segment: near.segment, streetName, cityName: preferred };
     }
 
@@ -1171,6 +1209,7 @@
      * Performs multiple scans per tile to catch late-loading RPPs
      */
     function onMergeEnd() {
+        dlog(`event: mergeend (zoom=${mapGetZoom()}, autoScan=${scannerState.status === STATE.running})`);
         if (scannerState.status === STATE.running && !scannerState.scanningCurrentTile) {
             scannerState.scanningCurrentTile = true;
             console.log('Merge complete, starting multi-scan sequence...');
@@ -1406,6 +1445,7 @@
         }
         let fixedThisScan = 0;
         let flaggedThisScan = 0;
+        const deferredBefore = sessionStats.skippedStreetUnresolved;
 
         for (const rpp of rpps) {
             const result = processRPP(rpp, UpdateObject);
@@ -1417,6 +1457,8 @@
             }
         }
 
+        const deferredThisScan = sessionStats.skippedStreetUnresolved - deferredBefore;
+        dlog(`scan done: ${rpps.length} RPP(s) → fixed ${fixedThisScan}, flagged ${flaggedThisScan}, deferred (street not loaded) ${deferredThisScan}`);
         if (fixedThisScan > 0 || flaggedThisScan > 0) {
             console.log(`✅ Fixed ${fixedThisScan} RPP(s), flagged ${flaggedThisScan} addressless (manual delete)`);
         }
@@ -1437,21 +1479,37 @@
 
         if (hasPendingUpdateRequests(rpp)) {
             sessionStats.skippedPendingURs++;
+            dlog('SKIP', venueId, '— pending update requests');
             console.log(`⏭️  Skipping ${getStreetAddress(rpp)} [${venueId}] — has pending update requests`);
             return null;
         }
 
-        if (!hasValidAddress(rpp)) {
-            // FLAG ONLY — never auto-delete. Addressless RPPs get the red highlight
-            // so they can be reviewed and deleted by hand. Auto-deleting map objects
-            // on every pan is too destructive (a street load race once queued
-            // well-addressed RPPs for deletion).
+        const street = resolveStreet(rpp);
+
+        // Street referenced but NOT loaded into the model yet (the post-pan/zoom
+        // merge window — widened when the GIS Probe jumps the map + fires heavy
+        // async fetches). We can't read this RPP's address or classify its city,
+        // so do NOTHING: no delete, no flag, no entry/lock fix, and crucially no
+        // city-fix retarget. It is re-scanned on the next mergeend once its street
+        // has loaded. This is the root cause of both the false deletions (v4.5.1)
+        // and the wrong-street retargets (v4.5.2).
+        if (street.resolved === false) {
+            sessionStats.skippedStreetUnresolved++;
+            dlog('DEFER', venueId, `— street not loaded yet (streetID=${rpp.attributes.streetID}); re-scan on next merge`);
+            return null;
+        }
+
+        if (!street.name.trim()) {
+            // Positively addressless (street resolved, empty name) → FLAG ONLY,
+            // never auto-deleted. Red highlight for manual review/deletion.
             sessionStats.flaggedAddresslessIds.add(venueId);
             sessionStats.flaggedAddressless++;
+            dlog('FLAG', venueId, '— addressless (street loaded, no name) → delete manually');
             console.log(`🔺 Flagged addressless (delete manually): ${getStreetAddress(rpp)} [${venueId}]`);
             return 'flagged';
         }
 
+        dlog('eval', venueId, `"${getStreetAddress(rpp)}" (street="${street.name}")`);
         const fixResult = attemptRPPFix(rpp, venueId, UpdateObject);
         return fixResult ? 'fixed' : null;
     }
@@ -1868,6 +1926,7 @@
         sessionStats.lastScanDuration = null;
         sessionStats.recentFixes.length = 0;
         sessionStats.skippedPendingURs = 0;
+        sessionStats.skippedStreetUnresolved = 0;
         // City-fix session counters
         cityStats.retargets = 0;
         cityStats.altsQueued = 0;
@@ -2301,6 +2360,7 @@
                     <li>Lock levels set to ${targetLockLevel}: ${sessionStats.lockLevelsFixed}</li>
                     <li style="color: #C62828;">Flagged — no address (delete manually): ${sessionStats.flaggedAddressless}</li>
                     <li style="color: #F57C00;">Skipped (pending URs): ${sessionStats.skippedPendingURs}</li>
+                    <li style="color: #888;">Deferred (street still loading): ${sessionStats.skippedStreetUnresolved}</li>
                     <li style="color: ${pendingColor}; font-weight: ${pendingWeight};">Pending: ${sessionStats.pendingChanges}/${CONFIG.rpp.maxPendingChanges}</li>
                 </ul>
                 ${buildCityFixStatsHtml()}
@@ -2350,6 +2410,7 @@
                   <li style="color:#888;">Skipped — no nearby segment: ${cityStats.noSegment}</li>
                   <li style="color:#888;">Skipped — ambiguous ZIP: ${cityStats.ambiguous}</li>
                   <li style="color:#888;">Skipped — segment pending UR: ${cityStats.skippedSegmentUR}</li>
+                  <li style="color:#C62828;">Skipped — wrong street (would change street): ${cityStats.skippedWrongStreet}</li>
                 </ul>
               ` : ''}
             </div>`;
