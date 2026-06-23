@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      4.5.0
-// @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if 1 or 2, queues RPPs with no address for deletion. v4.1: optional city-fix against USPS preferred names (CO only, opt-in). v4.1.1: retarget RPP in same scan as add_alt. v4.1.2: configurable max-segment-distance (default 300m for rural). v4.1.7: write city-fix names in WME title case (reuse existing city) instead of raw USPS upper case.
+// @version      4.5.1
+// @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if 1 or 2, and HIGHLIGHTS RPPs with no address for manual review (deletion is never automatic). v4.1: optional city-fix against USPS preferred names (CO only, opt-in). v4.1.1: retarget RPP in same scan as add_alt. v4.1.2: configurable max-segment-distance (default 300m for rural). v4.1.7: write city-fix names in WME title case (reuse existing city) instead of raw USPS upper case. v4.5.1: CRITICAL FIX — never treat an RPP whose street isn't loaded yet as addressless (a load race on pan was deleting well-addressed RPPs); addressless RPPs are now FLAGGED-ONLY (highlight) and deleted by hand, never auto-deleted.
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
 // @updateURL    file:///C:/Users/manch/Desktop/WME/RPP-Auto-Fixer/wme-rpp-auto-fixer.user.js
@@ -110,7 +110,7 @@
     'use strict';
 
     /** Script version — single source of truth (also referenced in displayUI sidebar header). */
-    const SCRIPT_VERSION = '4.5.0';
+    const SCRIPT_VERSION = '4.5.1';
 
     console.log(`🏠 WME RPP Auto-Fixer v${SCRIPT_VERSION} loaded`);
 
@@ -210,15 +210,14 @@
         totalFixed: 0,
         entryPointsAdded: 0,
         lockLevelsFixed: 0,
-        queuedForDeletion: 0,
+        flaggedAddressless: 0,
         fixedVenueIds: new Set(),
-        deletedVenueIds: new Set(),
+        flaggedAddresslessIds: new Set(),
         pendingChanges: 0,
         totalRPPsSeen: 0,
         lastScanDuration: null,
         recentFixes: [],  // {venueId, address, lat, lon, timestamp} — newest first, capped at MAX_RECENT_FIXES
-        skippedPendingURs: 0,
-        skippedDeleteUnavailable: 0
+        skippedPendingURs: 0
     };
 
     const MAX_RECENT_FIXES = 25;
@@ -324,7 +323,7 @@
     const HIGHLIGHT_ENABLED_KEY = 'rppAutoFixer.highlightRPPs';
     const HIGHLIGHT_LAYER_NAME = 'rpp_fixer_highlights';
     const HIGHLIGHT_COLORS = {
-        delete: '#FF2D55',  // no street name → deletion candidate
+        delete: '#FF2D55',  // no street name → flagged for MANUAL deletion (never auto-deleted)
         fix: '#FF9500',     // needs entry point and/or lock raise
         ok: '#00FF00',      // nothing for the fixer to do (pure green)
     };
@@ -1032,9 +1031,9 @@
 
     /**
      * What would the fixer do with this RPP? Drives the highlight color.
-     * Mirrors processRPP's decision order: street-less RPPs are deletion
-     * candidates; otherwise check entry point + lock. (City-fix is excluded —
-     * its ZIP/segment lookups are too heavy to run per venue per pan.)
+     * Mirrors processRPP's decision order: street-less RPPs are flagged for
+     * manual deletion (red); otherwise check entry point + lock. (City-fix is
+     * excluded — its ZIP/segment lookups are too heavy to run per venue per pan.)
      */
     function rppHighlightStatus(rpp) {
         if (!hasValidAddress(rpp)) {
@@ -1094,9 +1093,8 @@
     /** One-line console summary of which mutation paths are available. */
     function logActionCapabilities() {
         const legacyUpdate = !!requireActionClass('Waze/Action/UpdateObject');
-        const legacyDelete = !!requireActionClass('Waze/Action/DeleteObject');
         const cap = (sdkOk, legacyOk) => sdkOk ? 'SDK' : (legacyOk ? 'legacy' : 'NONE');
-        console.log(`🏠 capabilities: update=${cap(!!wmeSdk, legacyUpdate)}, delete=${cap(!!wmeSdk, legacyDelete)}, add-alt=${cap(!!wmeSdk, !!AddAlternateStreet)}`);
+        console.log(`🏠 capabilities: update=${cap(!!wmeSdk, legacyUpdate)}, add-alt=${cap(!!wmeSdk, !!AddAlternateStreet)} (delete=manual only)`);
     }
 
     /**
@@ -1396,39 +1394,31 @@
         }
     }
 
-    /** One-time-per-session warning flag for the missing DeleteObject action. */
-    let warnedDeleteUnavailable = false;
-
     /**
      * Process all RPPs for fixes
      * @param {Array} rpps - Array of RPP venue objects
      */
     function processRPPs(rpps) {
         const UpdateObject = requireActionClass('Waze/Action/UpdateObject');
-        const DeleteObject = requireActionClass('Waze/Action/DeleteObject');
         if (!wmeSdk && !UpdateObject) {
             console.error('processRPPs: no SDK and no UpdateObject action — no fixes possible');
             return;
         }
-        if (!wmeSdk && !DeleteObject && !warnedDeleteUnavailable) {
-            warnedDeleteUnavailable = true;
-            console.warn('processRPPs: no SDK and no DeleteObject action — no-address RPPs will be counted but NOT deleted');
-        }
         let fixedThisScan = 0;
-        let deletedThisScan = 0;
+        let flaggedThisScan = 0;
 
         for (const rpp of rpps) {
-            const result = processRPP(rpp, UpdateObject, DeleteObject);
+            const result = processRPP(rpp, UpdateObject);
             if (result === 'fixed') {
                 fixedThisScan++;
             }
-            if (result === 'deleted') {
-                deletedThisScan++;
+            if (result === 'flagged') {
+                flaggedThisScan++;
             }
         }
 
-        if (fixedThisScan > 0 || deletedThisScan > 0) {
-            console.log(`✅ Fixed ${fixedThisScan} RPP(s), queued ${deletedThisScan} for deletion`);
+        if (fixedThisScan > 0 || flaggedThisScan > 0) {
+            console.log(`✅ Fixed ${fixedThisScan} RPP(s), flagged ${flaggedThisScan} addressless (manual delete)`);
         }
     }
 
@@ -1436,13 +1426,12 @@
      * Process a single RPP
      * @param {Object} rpp - RPP venue object
      * @param {Function} UpdateObject - WME UpdateObject action
-     * @param {Function|null} DeleteObject - WME DeleteObject action (null when WME no longer exposes it)
-     * @returns {string|null} 'fixed', 'deleted', or null
+     * @returns {string|null} 'fixed', 'flagged', or null
      */
-    function processRPP(rpp, UpdateObject, DeleteObject) {
+    function processRPP(rpp, UpdateObject) {
         const venueId = rpp.attributes.id;
 
-        if (sessionStats.fixedVenueIds.has(venueId) || sessionStats.deletedVenueIds.has(venueId)) {
+        if (sessionStats.fixedVenueIds.has(venueId) || sessionStats.flaggedAddresslessIds.has(venueId)) {
             return null;
         }
 
@@ -1453,16 +1442,14 @@
         }
 
         if (!hasValidAddress(rpp)) {
-            if (!wmeSdk && !DeleteObject) {
-                sessionStats.skippedDeleteUnavailable++;
-                return null;
-            }
-            if (!deleteRPP(rpp, DeleteObject)) {
-                return null;
-            }
-            sessionStats.deletedVenueIds.add(venueId);
-            sessionStats.queuedForDeletion++;
-            return 'deleted';
+            // FLAG ONLY — never auto-delete. Addressless RPPs get the red highlight
+            // so they can be reviewed and deleted by hand. Auto-deleting map objects
+            // on every pan is too destructive (a street load race once queued
+            // well-addressed RPPs for deletion).
+            sessionStats.flaggedAddresslessIds.add(venueId);
+            sessionStats.flaggedAddressless++;
+            console.log(`🔺 Flagged addressless (delete manually): ${getStreetAddress(rpp)} [${venueId}]`);
+            return 'flagged';
         }
 
         const fixResult = attemptRPPFix(rpp, venueId, UpdateObject);
@@ -1527,7 +1514,7 @@
     /**
      * Check if RPP has a valid address. Only a street name qualifies — a house
      * number alone ("12" of nothing) gives no idea where the RPP belongs, so
-     * those are deletion candidates, never fix/retarget candidates.
+     * those are flagged for manual deletion, never fix/retarget candidates.
      * @param {Object} rpp - RPP venue object
      * @returns {boolean} True if has valid address
      */
@@ -1535,44 +1522,50 @@
         if (!rpp?.attributes) {
             return false;
         }
-        return getStreetName(rpp).trim().length > 0;
+        const { resolved, name } = resolveStreet(rpp);
+        // An UNRESOLVED street (referenced but not loaded into the model yet) is
+        // NOT proof of "no address" — so it is never a deletion candidate. This
+        // guards the load race that previously deleted well-addressed RPPs: on a
+        // pan, venues merge into the model before their streets do, so a transient
+        // failed street lookup must not be read as an empty address.
+        if (!resolved) {
+            return true;
+        }
+        return name.trim().length > 0;
     }
 
     /**
-     * Get street name for an RPP
+     * Resolve an RPP's street association against the loaded model.
+     *
+     * `resolved` is false ONLY when the RPP references a `streetID` whose street
+     * object isn't in `W.model.streets` yet — which happens routinely right after
+     * a pan, when venues merge into the model before their streets do. Callers
+     * must NOT treat an unresolved street as "addressless"; doing so was the bug
+     * that queued well-addressed RPPs for deletion on `mergeend`.
+     *
+     * A genuinely street-less RPP (no `streetID`) resolves with an empty name.
+     * @param {Object} rpp - RPP venue object
+     * @returns {{resolved: boolean, name: string}}
+     */
+    function resolveStreet(rpp) {
+        const streetId = rpp.attributes.streetID;
+        if (!streetId) {
+            return { resolved: true, name: '' };
+        }
+        const stObj = W.model.streets.getObjectById(streetId);
+        if (!stObj) {
+            return { resolved: false, name: '' };
+        }
+        return { resolved: true, name: stObj.attributes?.name || '' };
+    }
+
+    /**
+     * Get street name for an RPP (display string; empty when none/unresolved).
      * @param {Object} rpp - RPP venue object
      * @returns {string} Street name or empty string
      */
     function getStreetName(rpp) {
-        if (!rpp.attributes.streetID) {
-            return '';
-        }
-        const stObj = W.model.streets.getObjectById(rpp.attributes.streetID);
-        return stObj?.attributes?.name || '';
-    }
-
-    /**
-     * Delete an RPP (queue for deletion). SDK-first; legacy DeleteObject fallback.
-     * @param {Object} rpp - RPP venue object
-     * @param {Function|null} DeleteObject - legacy WME DeleteObject action (null when removed)
-     * @returns {boolean} True if the deletion was queued
-     */
-    function deleteRPP(rpp, DeleteObject) {
-        try {
-            const address = getStreetAddress(rpp);
-            if (wmeSdk) {
-                wmeSdk.DataModel.Venues.deleteVenue({ venueId: String(rpp.attributes.id) });
-            } else {
-                W.model.actionManager.add(new DeleteObject(rpp));
-            }
-            console.log(`🗑️ Queued for deletion (no address): ${address}${wmeSdk ? ' (SDK)' : ''}`);
-            sessionStats.pendingChanges++;
-            checkPendingChangesLimit();
-            return true;
-        } catch (err) {
-            console.error('deleteRPP: error:', err);
-            return false;
-        }
+        return resolveStreet(rpp).name;
     }
 
     /**
@@ -1867,15 +1860,14 @@
         sessionStats.totalFixed = 0;
         sessionStats.entryPointsAdded = 0;
         sessionStats.lockLevelsFixed = 0;
-        sessionStats.queuedForDeletion = 0;
+        sessionStats.flaggedAddressless = 0;
         sessionStats.fixedVenueIds.clear();
-        sessionStats.deletedVenueIds.clear();
+        sessionStats.flaggedAddresslessIds.clear();
         sessionStats.pendingChanges = 0;
         sessionStats.totalRPPsSeen = 0;
         sessionStats.lastScanDuration = null;
         sessionStats.recentFixes.length = 0;
         sessionStats.skippedPendingURs = 0;
-        sessionStats.skippedDeleteUnavailable = 0;
         // City-fix session counters
         cityStats.retargets = 0;
         cityStats.altsQueued = 0;
@@ -2051,7 +2043,7 @@
 
         console.log('✅ Scan complete!');
         stopScanning();
-        alert(`Scan complete!\n\nScan duration: ${durationStr}\nTotal RPPs seen: ${sessionStats.totalRPPsSeen}\nRPPs fixed: ${sessionStats.totalFixed}\nRPPs queued for deletion: ${sessionStats.queuedForDeletion}\n\nDon't forget to click Save!`);
+        alert(`Scan complete!\n\nScan duration: ${durationStr}\nTotal RPPs seen: ${sessionStats.totalRPPsSeen}\nRPPs fixed: ${sessionStats.totalFixed}\nAddressless RPPs flagged (delete manually): ${sessionStats.flaggedAddressless}\n\nDon't forget to click Save!`);
     }
 
     /**
@@ -2307,9 +2299,8 @@
                     <li>Total RPPs fixed: <strong>${sessionStats.totalFixed}</strong></li>
                     <li>Entry points added: ${sessionStats.entryPointsAdded}</li>
                     <li>Lock levels set to ${targetLockLevel}: ${sessionStats.lockLevelsFixed}</li>
-                    <li style="color: #C62828;">Queued for deletion: ${sessionStats.queuedForDeletion}</li>
+                    <li style="color: #C62828;">Flagged — no address (delete manually): ${sessionStats.flaggedAddressless}</li>
                     <li style="color: #F57C00;">Skipped (pending URs): ${sessionStats.skippedPendingURs}</li>
-                    <li style="color: #C62828;">Skipped (delete unavailable): ${sessionStats.skippedDeleteUnavailable}</li>
                     <li style="color: ${pendingColor}; font-weight: ${pendingWeight};">Pending: ${sessionStats.pendingChanges}/${CONFIG.rpp.maxPendingChanges}</li>
                 </ul>
                 ${buildCityFixStatsHtml()}
@@ -2379,7 +2370,7 @@
               </label>
               ${highlightEnabled ? `
                 <p style="margin: 2px 0 2px 20px; font-size: 10px; color:#666;">
-                  <span style="color:${HIGHLIGHT_COLORS.delete};">▲ delete</span> ·
+                  <span style="color:${HIGHLIGHT_COLORS.delete};">▲ no address (delete manually)</span> ·
                   <span style="color:${HIGHLIGHT_COLORS.fix};">▲ needs fix</span> ·
                   <span style="color:${HIGHLIGHT_COLORS.ok};">▲ ok</span>
                 </p>
@@ -2437,7 +2428,7 @@
                 <ol style="margin: 3px 0 3px 15px; font-size: 9px; padding-left: 5px;">
                     <li><strong>Auto:</strong> Click "Start Auto-Scan" to scan visible area</li>
                     <li><strong>Manual:</strong> Pan around, script auto-fixes RPPs</li>
-                    <li>No-address RPPs queued for deletion</li>
+                    <li>No-address RPPs are flagged red — review &amp; delete by hand</li>
                     <li><strong>Click Save when done</strong></li>
                 </ol>
             </div>
@@ -2449,14 +2440,14 @@
      * @returns {string} HTML string or empty
      */
     function buildSaveReminderSection() {
-        if (sessionStats.totalFixed === 0 && sessionStats.queuedForDeletion === 0) {
+        if (sessionStats.totalFixed === 0 && sessionStats.flaggedAddressless === 0) {
             return '';
         }
 
         return `
             <div style="background: #e3f2fd; padding: 6px; border-radius: 4px; margin-top: 6px; border-left: 3px solid #2196F3;">
                 <p style="margin: 3px 0; font-weight: bold; color: #1976D2; font-size: 10px;">💾 Don't forget to SAVE!</p>
-                <p style="margin: 3px 0; font-size: 9px;">${sessionStats.totalFixed} fixes + ${sessionStats.queuedForDeletion} deletions pending.</p>
+                <p style="margin: 3px 0; font-size: 9px;">${sessionStats.totalFixed} fixes pending · ${sessionStats.flaggedAddressless} addressless flagged (delete by hand).</p>
             </div>
         `;
     }
