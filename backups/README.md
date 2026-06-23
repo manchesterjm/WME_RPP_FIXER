@@ -11,8 +11,8 @@ This folder contains backup copies of every version of the WME RPP Auto-Fixer sc
 
 ## Current Backups
 
-| Version | Date | Description |
-|---------|------|-------------|
+| Version | Date       | Description                   |
+| ------- | ---------- | ----------------------------- |
 | 3.10.2  | 2025-11-16 | Scan zoom level 19 (restored) |
 
 ## How to Use Backups

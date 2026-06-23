@@ -1,6 +1,6 @@
 # WME RPP Auto-Fixer - Complete Guide
 
-**Current Version**: 3.12.0
+**Current Version**: 4.0.9
 
 ## Overview
 
@@ -44,23 +44,44 @@ etc.
 
 **Important:** Only changes level 1-2 to level 3. Does NOT touch RPPs already at level 3+.
 
+### ✅ What It Skips (v4.0.7+)
+
+#### RPPs with Pending Update Requests
+**Problem:** WME rejects edits to venues with pending Place Update Requests (PURs). Trying to save a fix for one of these triggers the "That change isn't allowed at this time and won't be sent for review" toast.
+
+**Skip:** Any venue where `attributes.venueUpdateRequests.length > 0` is left untouched. Counted in the new "Skipped (pending URs)" stat row (orange).
+
+To handle these manually: open the place in WME → click **Review requests** → approve or dismiss → re-run the auto-fixer over that area.
+
 ---
 
 ## Installation
 
-### 1. Disable Old Script (If Installed)
-Open Tampermonkey dashboard and **disable** "WME RPP Checks (No Iteration)"
+> **Browser Requirement:** Use **Google Chrome** with **Violentmonkey** for WME script development.
 
-### 2. Install New Script
-1. Open the file: `wme-rpp-auto-fixer-v3.12.0.user.js`
-2. Copy all contents
-3. Open Tampermonkey → Click "+" to create new script
-4. Paste the code
-5. Click Save (Ctrl+S)
+### 1. Prerequisites
+1. Install Google Chrome (if not already)
+2. Install Violentmonkey from Chrome Web Store
+3. Go to `chrome://extensions` → Find Violentmonkey → Click **Details**
+4. Enable **"Allow access to file URLs"** (required for auto-reload)
 
-### 3. Refresh WME
-1. Go to Waze Map Editor
-2. Press `Ctrl+R` to refresh
+### 2. Disable Old Script (If Installed)
+Open Violentmonkey dashboard and **disable** "WME RPP Checks (No Iteration)"
+
+### 3. Install New Script (Loader + Local File - Recommended)
+1. Click Violentmonkey icon → Click gear icon (Dashboard)
+2. Drag `wme-rpp-auto-fixer-loader.user.js` onto the dashboard and install it
+3. The loader uses `@require file:///C:/Users/manch/Desktop/WME/RPP-Auto-Fixer/wme-rpp-auto-fixer.user.js`
+4. Save edits to `wme-rpp-auto-fixer.user.js` → refresh WME and changes pick up immediately. No version bump or re-install needed for the loader.
+
+### Alternative: Drag & Drop Install
+1. Open Violentmonkey Dashboard
+2. Drag `wme-rpp-auto-fixer.user.js` onto the dashboard
+3. Click "Install" when prompted (note: changes won't auto-reload — you'd have to re-install on every edit)
+
+### 4. Refresh WME
+1. Go to Waze Map Editor in Chrome
+2. Press `Ctrl+Shift+R` to hard refresh
 3. Look for **🔧 RPP Fix** tab in left sidebar
 
 ---
@@ -205,21 +226,32 @@ Session Statistics:
 • Total Fixed: 23
 • Entry Points Added: 15
 • Lock Levels Fixed: 18
-• Pending changes: 15 / 100
+• Queued for deletion: 0
+• Skipped (pending URs): 3
+• Pending: 15 / 100
 
 Last Scan: 847 RPPs seen, completed in 3m 45s
 
 Current view: 12 RPPs
 ```
-- Pending changes shows in orange when ≥80, red/bold when ≥100
+- Pending shows in orange when ≥80, red/bold when ≥100
+- Skipped (pending URs) — venues with `venueUpdateRequests.length > 0`
 - Last Scan stats only appear after completing an auto-scan
+
+### Recent Fixes Panel (v4.0.5+)
+A clickable list of the last 25 RPPs the script has touched (newest first). Click any address to:
+1. Pan the map to its saved coordinates (works even if the venue isn't currently loaded)
+2. Auto-select the venue once the tile finishes loading
+
+Use this to identify the failing RPP if WME ever rejects a save — it will be in this list.
 
 ### Control Buttons
 - **⏸️ Pause Auto-Fix** / **▶️ Resume Auto-Fix** - Control manual mode
 - **▶️ Start Auto-Scan** - Begin automatic scanning
 - **⏸️ Pause Scan** / **▶️ Resume Scan** - Control scan
 - **⏹️ Stop Scan** - Cancel scan
-- **🔄 Reset Stats** - Clear session statistics
+- **🔄 Reset** - Clear session statistics
+- **🔬 Dump Selected** - Diagnostic: with a venue selected in WME, dumps its full attribute object + nearby Map Update Requests to the browser console. Useful for discovering attribute names when WME rejects an unexpected venue type.
 
 ---
 
@@ -279,17 +311,17 @@ This creates a properly formatted entry/exit point that WME can save.
 
 ## Feature Evolution
 
-| Feature | v1.0 "RPP Checks" | v3.0.0 "Auto-Fix" | v3.10.2 "Auto-Scan" |
-|---------|-------------------|-------------------|---------------------|
-| **Scans RPPs** | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Auto-fixes** | ❌ No | ✅ Click button | ✅ **Automatic** |
-| **Manual mode** | ❌ No | ❌ No | ✅ **Pan & fix** |
-| **Auto-scan** | ❌ No | ❌ No | ✅ **Grid scan** |
-| **Progress bar** | ❌ No | ❌ No | ✅ **Visual** |
-| **ETA display** | ❌ No | ❌ No | ✅ **Real-time** |
-| **Event-driven** | ❌ No | ❌ No | ✅ **mergeend** |
-| **Uses UpdateObject** | ❌ No | ✅ Yes | ✅ Yes |
-| **Queues for save** | ❌ No | ✅ Yes | ✅ Yes |
+| Feature               | v1.0 "RPP Checks" | v3.0.0 "Auto-Fix" | v3.10.2 "Auto-Scan" |
+| --------------------- | ----------------- | ----------------- | ------------------- |
+| **Scans RPPs**        | ✅ Yes             | ✅ Yes             | ✅ Yes               |
+| **Auto-fixes**        | ❌ No              | ✅ Click button    | ✅ **Automatic**     |
+| **Manual mode**       | ❌ No              | ❌ No              | ✅ **Pan & fix**     |
+| **Auto-scan**         | ❌ No              | ❌ No              | ✅ **Grid scan**     |
+| **Progress bar**      | ❌ No              | ❌ No              | ✅ **Visual**        |
+| **ETA display**       | ❌ No              | ❌ No              | ✅ **Real-time**     |
+| **Event-driven**      | ❌ No              | ❌ No              | ✅ **mergeend**      |
+| **Uses UpdateObject** | ❌ No              | ✅ Yes             | ✅ Yes               |
+| **Queues for save**   | ❌ No              | ✅ Yes             | ✅ Yes               |
 
 ---
 
@@ -405,7 +437,18 @@ console.log('GeoJSON Point:', geoJSONPoint);
 - **v3.8.0**: Code quality improvements (SOFA principles)
 - **v3.9.0**: ESLint integration
 - **v3.10.0**: Visual progress bar
-- **v3.10.2**: Current version with zoom 19 optimization
+- **v3.10.2**: Zoom 19 optimization
+- **v3.14.0**: SOFA refactor - major complexity reduction
+- **v3.14.1**: Event listener fix for WME API changes
+- **v3.14.2**: Viewport filtering fix - only processes RPPs in current view
+- **v3.15.0**: Multi-scan per tile - catches late-loading RPPs for better coverage
+- **v4.0.3**: Synced in-UI `SCRIPT_VERSION` constant with header `@version` (UI was stuck displaying 4.0.2)
+- **v4.0.4**: Per-tile dwell reduced from 2,100 ms → 500 ms for Chrome (`scanIntervalMs` 800→200, `delayMs` 500→100). Same 3-scan safety margin, just compressed timings.
+- **v4.0.5**: Added Recent Fixes sidebar list (last 25 fixed RPPs, clickable to select). Removed redundant ETA render after pan — ETA now displays once per tile instead of twice.
+- **v4.0.6**: Recent Fixes click now pans to saved coords first then selects after `mergeend` (works at any zoom). Added 🔬 Dump Selected diagnostic button.
+- **v4.0.7**: Skip RPPs with pending update requests (`venue.attributes.venueUpdateRequests.length > 0`) — prevents the WME "That change isn't allowed at this time" save rejection. Adds "Skipped (pending URs)" stat row.
+- **v4.0.8**: (changelog entry pending — no pre-change backup exists to diff against; needs to be filled in from memory of the edits)
+- **v4.0.9**: (changelog entry pending — no pre-change backup exists to diff against; needs to be filled in from memory of the edits)
 
 ---
 
@@ -424,4 +467,4 @@ This script is provided as-is for WME editors. Feel free to modify and improve!
 
 ---
 
-**Last Updated**: November 16, 2025 (v3.10.2)
+**Last Updated**: April 24, 2026 (header synced to v4.0.9; changelog entries for 4.0.8/4.0.9 still pending)

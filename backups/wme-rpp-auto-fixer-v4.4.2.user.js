@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      4.5.0
+// @version      4.4.2
 // @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if 1 or 2, queues RPPs with no address for deletion. v4.1: optional city-fix against USPS preferred names (CO only, opt-in). v4.1.1: retarget RPP in same scan as add_alt. v4.1.2: configurable max-segment-distance (default 300m for rural). v4.1.7: write city-fix names in WME title case (reuse existing city) instead of raw USPS upper case.
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
@@ -110,7 +110,7 @@
     'use strict';
 
     /** Script version — single source of truth (also referenced in displayUI sidebar header). */
-    const SCRIPT_VERSION = '4.5.0';
+    const SCRIPT_VERSION = '4.4.2';
 
     console.log(`🏠 WME RPP Auto-Fixer v${SCRIPT_VERSION} loaded`);
 
@@ -995,8 +995,7 @@
                 zIndexing: true,
                 styleContext: {
                     getStatusColor: ({ feature }) => HIGHLIGHT_COLORS[feature?.properties?.status] || '#888888',
-                    getPointRadius: ({ zoomLevel }) => (zoomLevel > 17 ? 16 : 11),
-                    getHnLabel: ({ feature }) => feature?.properties?.hn || '',
+                    getPointRadius: ({ zoomLevel }) => (zoomLevel > 17 ? 14 : 9),
                 },
                 styleRules: [{
                     style: {
@@ -1007,15 +1006,6 @@
                         strokeColor: '${getStatusColor}',
                         strokeWidth: 4,
                         strokeOpacity: 0.9,
-                        // House-number label (WME PIE-style), drawn above the triangle. Empty string → no text.
-                        label: '${getHnLabel}',
-                        fontColor: '#1a1a1a',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        labelOutlineColor: '#ffffff',
-                        labelOutlineWidth: 3,
-                        labelAlign: 'cm',
-                        labelYOffset: -24,
                     },
                 }],
             });
@@ -1046,16 +1036,6 @@
     }
 
     /**
-     * The RPP's house number as a display string for the highlight label.
-     * Mirrors WME PIE, which labels RESIDENCE_HOME places with their house
-     * number. Returns '' when the RPP has none → the layer renders no label.
-     */
-    function rppHouseNumberLabel(rpp) {
-        const houseNumber = rpp.attributes.houseNumber;
-        return (houseNumber != null && String(houseNumber).trim() !== '') ? String(houseNumber).trim() : '';
-    }
-
-    /**
      * Rebuild the highlight layer for the given RPPs (clears first, adds one
      * triangle per RPP colored by status). Pass [] to just clear — used when
      * the toggle goes off or the zoom drops below editing range.
@@ -1081,7 +1061,7 @@
                             type: 'Feature',
                             id: `rpp_hl_${rpp.attributes.id}`,
                             geometry: W.userscripts.toGeoJSONGeometry(geometry),
-                            properties: { status: rppHighlightStatus(rpp), hn: rppHouseNumberLabel(rpp) },
+                            properties: { status: rppHighlightStatus(rpp) },
                         },
                     });
                 } catch { /* skip this venue */ }

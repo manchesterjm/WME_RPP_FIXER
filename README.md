@@ -60,12 +60,12 @@ Follow conventions in [../STYLE_GUIDE.md](../STYLE_GUIDE.md)
 
 ## Version History
 
-| Version | Feature | Status |
-|---------|---------|--------|
-| 3.13.4 | Auto-reset stats when starting scan (fresh start each scan) | ✅ Current |
-| 3.13.3 | CRITICAL FIX: Duplicate UpdateObject bug, changes now appear in save queue | ✅ Stable |
-| 3.13.2 | Configurable lock level dropdown (for different states) | ✅ Stable |
-| 3.13.1 | Bug fixes: save counter, zoom check, RPP tracking | ✅ Stable |
+| Version | Feature                                                                    | Status    |
+| ------- | -------------------------------------------------------------------------- | --------- |
+| 3.13.4  | Auto-reset stats when starting scan (fresh start each scan)                | ✅ Current |
+| 3.13.3  | CRITICAL FIX: Duplicate UpdateObject bug, changes now appear in save queue | ✅ Stable  |
+| 3.13.2  | Configurable lock level dropdown (for different states)                    | ✅ Stable  |
+| 3.13.1  | Bug fixes: save counter, zoom check, RPP tracking                          | ✅ Stable  |
 
 See SESSION_PROGRESS.md for complete version history.
 

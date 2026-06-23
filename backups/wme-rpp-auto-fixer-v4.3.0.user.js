@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WME RPP Auto-Fixer
 // @namespace    http://tampermonkey.net/
-// @version      4.5.0
+// @version      4.3.0
 // @description  Automatically fixes RPPs as you pan: adds entry/exit points if missing, sets lock rank to 3 if 1 or 2, queues RPPs with no address for deletion. v4.1: optional city-fix against USPS preferred names (CO only, opt-in). v4.1.1: retarget RPP in same scan as add_alt. v4.1.2: configurable max-segment-distance (default 300m for rural). v4.1.7: write city-fix names in WME title case (reuse existing city) instead of raw USPS upper case.
 // @match        https://www.waze.com/*editor*
 // @match        https://beta.waze.com/*editor*
@@ -110,7 +110,7 @@
     'use strict';
 
     /** Script version — single source of truth (also referenced in displayUI sidebar header). */
-    const SCRIPT_VERSION = '4.5.0';
+    const SCRIPT_VERSION = '4.3.0';
 
     console.log(`🏠 WME RPP Auto-Fixer v${SCRIPT_VERSION} loaded`);
 
@@ -238,6 +238,7 @@
         totalCols: 0,
         stepWidth: 0,
         stepHeight: 0,
+        layersVisibility: '',
         scanningCurrentTile: false
     };
 
@@ -320,17 +321,6 @@
     const CITY_EXCLUDE_ROAD_TYPES = new Set([3, 4, 5, 10, 18, 19]);
     const CITY_MAX_SEGMENT_DISTANCE_DEFAULT = 300;   // rural CO default — long driveways
 
-    // ---- RPP highlight layer (WMEPH-style triangles; turn OFF when running WMEPH) ----
-    const HIGHLIGHT_ENABLED_KEY = 'rppAutoFixer.highlightRPPs';
-    const HIGHLIGHT_LAYER_NAME = 'rpp_fixer_highlights';
-    const HIGHLIGHT_COLORS = {
-        delete: '#FF2D55',  // no street name → deletion candidate
-        fix: '#FF9500',     // needs entry point and/or lock raise
-        ok: '#00FF00',      // nothing for the fixer to do (pure green)
-    };
-    let highlightEnabled = false;     // loaded from GM storage on init
-    let highlightLayerReady = false;  // layer added to the map (needs SDK)
-
     let cityData = null;      // { metadata, zips: { "80908": { preferred, recognized, avoid, state } } }
     let zctaData = null;      // { features: [{ properties: {zip}, geometry, _bbox }] }
     let cityFixEnabled = false;  // reloaded from GM storage on init
@@ -369,23 +359,6 @@
         try {
             if (typeof GM_setValue === 'function') {
                 GM_setValue(CITY_FIX_ENABLED_KEY, !!enabled);
-            }
-        } catch { /* ignore */ }
-    }
-
-    function loadHighlightPreference() {
-        try {
-            if (typeof GM_getValue === 'function') {
-                return GM_getValue(HIGHLIGHT_ENABLED_KEY, false);
-            }
-        } catch { /* ignore */ }
-        return false;
-    }
-
-    function saveHighlightPreference(enabled) {
-        try {
-            if (typeof GM_setValue === 'function') {
-                GM_setValue(HIGHLIGHT_ENABLED_KEY, !!enabled);
             }
         } catch { /* ignore */ }
     }
@@ -972,123 +945,10 @@
         sdkReady.then(() => {
             wmeSdk = getWmeSdk({ scriptId: 'wme-rpp-auto-fixer', scriptName: 'WME RPP Auto-Fixer' });
             logActionCapabilities();
-            initHighlightLayer();
         }).catch(err => {
             console.warn('🏠 WME SDK init failed — legacy actions only:', err.message);
             logActionCapabilities();
         });
-    }
-
-    /**
-     * Add the RPP highlight layer to the map (WMEPH-style: SDK layer with
-     * style rules; triangles so they read differently from WMEPH's marks).
-     * Called once after the SDK binds. Features are (re)built per scan by
-     * refreshRPPHighlights().
-     */
-    function initHighlightLayer() {
-        if (!wmeSdk) {
-            return;
-        }
-        try {
-            wmeSdk.Map.addLayer({
-                layerName: HIGHLIGHT_LAYER_NAME,
-                zIndexing: true,
-                styleContext: {
-                    getStatusColor: ({ feature }) => HIGHLIGHT_COLORS[feature?.properties?.status] || '#888888',
-                    getPointRadius: ({ zoomLevel }) => (zoomLevel > 17 ? 16 : 11),
-                    getHnLabel: ({ feature }) => feature?.properties?.hn || '',
-                },
-                styleRules: [{
-                    style: {
-                        pointRadius: '${getPointRadius}',
-                        graphicName: 'triangle',
-                        fillColor: '${getStatusColor}',
-                        fillOpacity: 0.2,
-                        strokeColor: '${getStatusColor}',
-                        strokeWidth: 4,
-                        strokeOpacity: 0.9,
-                        // House-number label (WME PIE-style), drawn above the triangle. Empty string → no text.
-                        label: '${getHnLabel}',
-                        fontColor: '#1a1a1a',
-                        fontSize: '12px',
-                        fontWeight: 'bold',
-                        labelOutlineColor: '#ffffff',
-                        labelOutlineWidth: 3,
-                        labelAlign: 'cm',
-                        labelYOffset: -24,
-                    },
-                }],
-            });
-            try {
-                const venuesZIndex = wmeSdk.Map.getLayerZIndex({ layerName: 'venues' });
-                wmeSdk.Map.setLayerZIndex({ layerName: HIGHLIGHT_LAYER_NAME, zIndex: venuesZIndex + 3 });
-            } catch { /* optional — layer still renders without an explicit z-index */ }
-            highlightLayerReady = true;
-            console.log(`🏠 highlight layer ready (enabled=${highlightEnabled})`);
-        } catch (err) {
-            console.warn('🏠 highlight layer init failed:', err.message);
-        }
-    }
-
-    /**
-     * What would the fixer do with this RPP? Drives the highlight color.
-     * Mirrors processRPP's decision order: street-less RPPs are deletion
-     * candidates; otherwise check entry point + lock. (City-fix is excluded —
-     * its ZIP/segment lookups are too heavy to run per venue per pan.)
-     */
-    function rppHighlightStatus(rpp) {
-        if (!hasValidAddress(rpp)) {
-            return 'delete';
-        }
-        const needsEntryPoint = !rpp.attributes.entryExitPoints?.length;
-        const needsLockFix = rpp.attributes.lockRank < getLockRankFromLevel(targetLockLevel);
-        return (needsEntryPoint || needsLockFix) ? 'fix' : 'ok';
-    }
-
-    /**
-     * The RPP's house number as a display string for the highlight label.
-     * Mirrors WME PIE, which labels RESIDENCE_HOME places with their house
-     * number. Returns '' when the RPP has none → the layer renders no label.
-     */
-    function rppHouseNumberLabel(rpp) {
-        const houseNumber = rpp.attributes.houseNumber;
-        return (houseNumber != null && String(houseNumber).trim() !== '') ? String(houseNumber).trim() : '';
-    }
-
-    /**
-     * Rebuild the highlight layer for the given RPPs (clears first, adds one
-     * triangle per RPP colored by status). Pass [] to just clear — used when
-     * the toggle goes off or the zoom drops below editing range.
-     */
-    function refreshRPPHighlights(rpps) {
-        if (!highlightLayerReady) {
-            return;
-        }
-        try {
-            wmeSdk.Map.removeAllFeaturesFromLayer({ layerName: HIGHLIGHT_LAYER_NAME });
-            if (!highlightEnabled) {
-                return;
-            }
-            for (const rpp of rpps) {
-                try {
-                    const geometry = rpp.getOLGeometry();
-                    if (!geometry) {
-                        continue;
-                    }
-                    wmeSdk.Map.addFeatureToLayer({
-                        layerName: HIGHLIGHT_LAYER_NAME,
-                        feature: {
-                            type: 'Feature',
-                            id: `rpp_hl_${rpp.attributes.id}`,
-                            geometry: W.userscripts.toGeoJSONGeometry(geometry),
-                            properties: { status: rppHighlightStatus(rpp), hn: rppHouseNumberLabel(rpp) },
-                        },
-                    });
-                } catch { /* skip this venue */ }
-            }
-        } catch (err) {
-            console.warn('🏠 highlight refresh failed:', err.message);
-        }
     }
 
     /** One-line console summary of which mutation paths are available. */
@@ -1106,7 +966,6 @@
         console.log('initializeScript: Start');
         try {
             targetLockLevel = loadLockLevelPreference();
-            highlightEnabled = loadHighlightPreference();
             const { tabLabel, tabPane } = W.userscripts.registerSidebarTab('rpp-auto-fixer');
             setupTabUI(tabLabel, tabPane);
             initCityFix();
@@ -1225,7 +1084,7 @@
      * @returns {boolean} True if zoom is sufficient
      */
     function isZoomSufficient() {
-        const currentZoom = mapGetZoom();
+        const currentZoom = W.map.getZoom();
         if (currentZoom < CONFIG.scan.minZoomForEditing) {
             console.warn(`⚠️ Zoom in more to edit (currently ${currentZoom}, need ${CONFIG.scan.minZoomForEditing}+).`);
             return false;
@@ -1350,7 +1209,6 @@
             }
             if (!isZoomSufficient()) {
                 lastVisibleCount = 0;
-                refreshRPPHighlights([]);
                 if (updateUI) {
                     displayUI(0);
                 }
@@ -1368,9 +1226,6 @@
             if (autoFixEnabled) {
                 processRPPs(allRPPs);
             }
-
-            // After fixes, so the triangle colors reflect post-fix state.
-            refreshRPPHighlights(allRPPs);
 
             if (updateUI) {
                 displayUI(allRPPs.length);
@@ -1711,146 +1566,53 @@
     }
 
     // ============================================================================
-    // MAP VIEW FACADE — SDK-first, legacy W.map fallback
-    // ============================================================================
-    // WME v2.354 removed W.map.getOLExtent() (and W.map.getExtent() now returns
-    // a WGS84 lon/lat array, not an OL Bounds). All auto-scan geometry runs in
-    // WGS84 degrees end-to-end: extents, step sizes, and tile centers share the
-    // same units, and setMapCenter takes the lon/lat the grid math produces.
-
-    /**
-     * Current viewport as a plain box {left, bottom, right, top, width, height}
-     * in WGS84 degrees, or null if no extent is available.
-     */
-    function mapGetExtentBox() {
-        let arr = null;
-        try {
-            if (wmeSdk) {
-                arr = wmeSdk.Map.getMapExtent();
-            } else {
-                const e = W.map.getExtent();
-                arr = Array.isArray(e) ? e : (e ? [e.left, e.bottom, e.right, e.top] : null);
-            }
-        } catch { /* fall through to null */ }
-        if (!arr || arr.some(n => typeof n !== 'number')) {
-            return null;
-        }
-        return {
-            left: arr[0], bottom: arr[1], right: arr[2], top: arr[3],
-            width: arr[2] - arr[0], height: arr[3] - arr[1],
-        };
-    }
-
-    /** @returns {{lon: number, lat: number}} Current map center (WGS84) */
-    function mapGetCenter() {
-        return wmeSdk ? wmeSdk.Map.getMapCenter() : W.map.getCenter();
-    }
-
-    /** @returns {number} Current zoom level */
-    function mapGetZoom() {
-        return wmeSdk ? wmeSdk.Map.getZoomLevel() : W.map.getZoom();
-    }
-
-    /** Recenter the map (and optionally change zoom). lonLat is WGS84. */
-    function mapSetCenter(lonLat, zoomLevel) {
-        if (wmeSdk) {
-            wmeSdk.Map.setMapCenter({ lonLat, zoomLevel });
-        } else {
-            W.map.setCenter(lonLat, zoomLevel);
-        }
-    }
-
-    // ============================================================================
     // LAYER MANAGEMENT
     // ============================================================================
 
-    let warnedLayerToggleUnavailable = false;
-
-    /** Layers we hid for the auto-scan, by reference — restored on stop/pause. */
-    let hiddenScanLayers = [];
-
     /**
-     * Resolve the legacy OpenLayers map. WME v2.354 removed `W.map.olMap`, but
-     * the OL map itself just moved — `W.map.getOLMap()` still returns it, and
-     * it also lives at `W.map.wazeMap.olMap`. The SDK is no substitute here:
-     * it has no layer enumeration (per-name visibility for nodes/segments/
-     * venues only), and hiding the satellite base layer is the whole point —
-     * that's what stops the imagery tile downloads during a scan.
-     * @returns {Object|null} The OL map, or null if every known path is gone
-     */
-    function getLegacyOlMap() {
-        try {
-            if (typeof W.map.getOLMap === 'function') {
-                return W.map.getOLMap();
-            }
-        } catch { /* fall through */ }
-        return W.map.olMap ?? W.map.wazeMap?.olMap ?? null;
-    }
-
-    /**
-     * Should this layer stay visible during the auto-scan? Keep ONLY streets
-     * and RPPs (plus our own highlight triangles); everything else — satellite
-     * imagery above all — is hidden to save bandwidth and render time.
-     */
-    function isScanKeepLayer(layer) {
-        if (layer === W.map.roadLayer || layer === W.map.venueLayer) {
-            return true;
-        }
-        const layerName = (layer.uniqueName || layer.name || '').toLowerCase();
-        return layerName === 'roads' || layerName === 'venues' || layerName === HIGHLIGHT_LAYER_NAME;
-    }
-
-    /**
-     * Hide every layer except streets + RPPs for the auto-scan. Tracks what it
-     * hid by reference so turnLayersOn() restores exactly that set, no matter
-     * how the layer list shifts mid-scan. No-op with a one-time note if the
-     * OL map can't be found.
+     * Turn off map layers for faster scanning
      */
     function turnLayersOff() {
-        if (hiddenScanLayers.length > 0) {
-            return;
-        }
-        const olMap = getLegacyOlMap();
-        if (!olMap?.layers) {
-            if (!warnedLayerToggleUnavailable) {
-                warnedLayerToggleUnavailable = true;
-                console.warn('turnLayersOff: OL map not found via any known path — scanning with all layers on');
-            }
+        if (scannerState.layersVisibility) {
             return;
         }
 
         try {
-            olMap.layers.forEach(layer => {
-                try {
-                    if (isScanKeepLayer(layer) || !layer.getVisibility()) {
-                        return;
-                    }
+            scannerState.layersVisibility = '';
+            const layers = W.map.olMap.layers;
+
+            layers.forEach(layer => {
+                if (layer.displayInLayerSwitcher) {
+                    scannerState.layersVisibility += layer.getVisibility() ? 'T' : 'F';
                     layer.setVisibility(false);
-                    hiddenScanLayers.push(layer);
-                } catch { /* leave this layer alone */ }
+                }
             });
-            console.log(`Hid ${hiddenScanLayers.length} layers for faster scanning (kept streets + RPPs)`);
+            console.log('Map layers turned off for faster scanning');
         } catch (err) {
             console.error('turnLayersOff: error:', err);
         }
     }
 
     /**
-     * Restore the layers hidden by turnLayersOff()
+     * Restore map layers to previous state
      */
     function turnLayersOn() {
-        if (hiddenScanLayers.length === 0) {
+        if (!scannerState.layersVisibility) {
             return;
         }
 
         try {
-            hiddenScanLayers.forEach(layer => {
-                try {
-                    layer.setVisibility(true);
-                } catch { /* layer may be gone — nothing to restore */ }
+            const layers = W.map.olMap.layers;
+            let j = 0;
+
+            layers.forEach(layer => {
+                if (layer.displayInLayerSwitcher && scannerState.layersVisibility.length > j) {
+                    layer.setVisibility(scannerState.layersVisibility.charAt(j) === 'T');
+                    j++;
+                }
             });
-            console.log(`Restored ${hiddenScanLayers.length} layers`);
-            hiddenScanLayers = [];
+            scannerState.layersVisibility = '';
+            console.log('Map layers restored');
         } catch (err) {
             console.error('turnLayersOn: error:', err);
         }
@@ -1893,8 +1655,8 @@
      */
     function initializeScannerState(startExtent) {
         scannerState.startExtent = startExtent;
-        scannerState.startCenter = mapGetCenter();
-        scannerState.startZoom = mapGetZoom();
+        scannerState.startCenter = W.map.getCenter();
+        scannerState.startZoom = W.map.getZoom();
         scannerState.startTime = Date.now();
         // status stays STOPPED until the grid is calculated (see startScanning).
         // Setting it RUNNING here causes a race: the zoom-triggered mergeend
@@ -1908,31 +1670,36 @@
     }
 
     /**
-     * Calculate scan grid parameters. Extents are mapGetExtentBox() boxes —
-     * everything in WGS84 degrees, so steps and totals stay unit-consistent.
-     * @param {Object} startExtent - Original map extent box
-     * @param {Object} viewportExtent - Viewport extent box at scan zoom
+     * Calculate scan grid parameters
+     * @param {Object} startExtent - Original map extent
+     * @param {Object} viewportExtent - Viewport extent at scan zoom
      */
     function calculateScanGrid(startExtent, viewportExtent) {
-        scannerState.stepWidth = viewportExtent.width * (1 - CONFIG.scan.overlap);
-        scannerState.stepHeight = viewportExtent.height * (1 - CONFIG.scan.overlap);
-        scannerState.totalCols = Math.ceil(startExtent.width / scannerState.stepWidth);
-        scannerState.totalRows = Math.ceil(startExtent.height / scannerState.stepHeight);
+        const viewportWidth = viewportExtent.getWidth();
+        const viewportHeight = viewportExtent.getHeight();
+
+        scannerState.stepWidth = viewportWidth * (1 - CONFIG.scan.overlap);
+        scannerState.stepHeight = viewportHeight * (1 - CONFIG.scan.overlap);
+        scannerState.totalCols = Math.ceil(startExtent.getWidth() / scannerState.stepWidth);
+        scannerState.totalRows = Math.ceil(startExtent.getHeight() / scannerState.stepHeight);
 
         console.log(`Scan grid: ${scannerState.totalCols} cols × ${scannerState.totalRows} rows`);
     }
 
     /**
      * Set initial scan position
-     * @param {Object} startExtent - Starting map extent box
-     * @param {Object} viewportExtent - Viewport extent box at scan zoom
+     * @param {Object} startExtent - Starting map extent
+     * @param {Object} viewportExtent - Viewport extent at scan zoom
      */
     function setInitialScanPosition(startExtent, viewportExtent) {
+        const viewportWidth = viewportExtent.getWidth();
+        const viewportHeight = viewportExtent.getHeight();
+
         scannerState.nextCenter = {
-            lon: startExtent.left + viewportExtent.width / 2,
-            lat: startExtent.top - viewportExtent.height / 2
+            lon: startExtent.left + viewportWidth / 2,
+            lat: startExtent.top - viewportHeight / 2
         };
-        mapSetCenter(scannerState.nextCenter, CONFIG.scan.zoom);
+        W.map.setCenter(scannerState.nextCenter, CONFIG.scan.zoom);
     }
 
     /**
@@ -1944,23 +1711,13 @@
             resetSessionStats();
             turnLayersOff();
 
-            const startExtent = mapGetExtentBox();
-            if (!startExtent) {
-                console.error('startScanning: map extent unavailable — cannot start');
-                turnLayersOn();
-                return;
-            }
+            const startExtent = W.map.getOLExtent();
             initializeScannerState(startExtent);
 
-            mapSetCenter(scannerState.startCenter, CONFIG.scan.zoom);
+            W.map.setCenter(scannerState.startCenter, CONFIG.scan.zoom);
 
             setTimeout(() => {
-                const viewportExtent = mapGetExtentBox();
-                if (!viewportExtent) {
-                    console.error('startScanning: viewport extent unavailable — aborting');
-                    stopScanning();
-                    return;
-                }
+                const viewportExtent = W.map.getOLExtent();
                 calculateScanGrid(startExtent, viewportExtent);
                 scannerState.status = STATE.running;
                 setInitialScanPosition(startExtent, viewportExtent);
@@ -1998,9 +1755,9 @@
 
         try {
             const s = scannerState.startExtent;
-            const viewportExtent = mapGetExtentBox();
+            const viewportExtent = W.map.getOLExtent();
 
-            if (!s || !viewportExtent || !scannerState.stepWidth) {
+            if (!s || !scannerState.stepWidth) {
                 stopScanning();
                 return;
             }
@@ -2019,7 +1776,7 @@
             scannerState.nextCenter = newCenter;
 
             console.log(`Scanning: row ${next.row + 1}/${scannerState.totalRows}, col ${next.col + 1}/${scannerState.totalCols}`);
-            mapSetCenter(scannerState.nextCenter, CONFIG.scan.zoom);
+            W.map.setCenter(scannerState.nextCenter, CONFIG.scan.zoom);
         } catch (err) {
             console.error('moveToNextScanPosition: error:', err);
             stopScanning();
@@ -2028,16 +1785,19 @@
 
     /**
      * Calculate center position for a tile
-     * @param {Object} startExtent - Starting extent box
-     * @param {Object} viewportExtent - Viewport extent box
+     * @param {Object} startExtent - Starting extent
+     * @param {Object} viewportExtent - Viewport extent
      * @param {number} col - Column index
      * @param {number} row - Row index
      * @returns {{lon: number, lat: number}}
      */
     function calculateTileCenter(startExtent, viewportExtent, col, row) {
+        const viewportWidth = viewportExtent.getWidth();
+        const viewportHeight = viewportExtent.getHeight();
+
         return {
-            lon: startExtent.left + (col * scannerState.stepWidth) + (viewportExtent.width / 2),
-            lat: startExtent.top - (row * scannerState.stepHeight) - (viewportExtent.height / 2)
+            lon: startExtent.left + (col * scannerState.stepWidth) + (viewportWidth / 2),
+            lat: startExtent.top - (row * scannerState.stepHeight) - (viewportHeight / 2)
         };
     }
 
@@ -2083,7 +1843,7 @@
         turnLayersOn();
 
         if (scannerState.startCenter && scannerState.startZoom) {
-            mapSetCenter(scannerState.startCenter, scannerState.startZoom);
+            W.map.setCenter(scannerState.startCenter, scannerState.startZoom);
         }
 
         resetScannerState();
@@ -2195,7 +1955,7 @@
      * @returns {string} HTML string or empty
      */
     function buildZoomWarningSection() {
-        const currentZoom = mapGetZoom();
+        const currentZoom = W.map.getZoom();
         if (currentZoom >= CONFIG.scan.minZoomForEditing) {
             return '';
         }
@@ -2313,7 +2073,6 @@
                     <li style="color: ${pendingColor}; font-weight: ${pendingWeight};">Pending: ${sessionStats.pendingChanges}/${CONFIG.rpp.maxPendingChanges}</li>
                 </ul>
                 ${buildCityFixStatsHtml()}
-                ${buildHighlightToggleHtml()}
         `;
 
         if (sessionStats.totalRPPsSeen > 0) {
@@ -2360,29 +2119,6 @@
                   <li style="color:#888;">Skipped — ambiguous ZIP: ${cityStats.ambiguous}</li>
                   <li style="color:#888;">Skipped — segment pending UR: ${cityStats.skippedSegmentUR}</li>
                 </ul>
-              ` : ''}
-            </div>`;
-    }
-
-    /**
-     * Build the RPP-highlight toggle block. Embedded inside the session stats
-     * card, below city-fix. Turn OFF when running WMEPH so the two scripts'
-     * highlight layers don't stack.
-     */
-    function buildHighlightToggleHtml() {
-        const toggleChecked = highlightEnabled ? 'checked' : '';
-        return `
-            <div style="border-top: 1px dashed #ccc; padding-top: 6px; margin-top: 6px;">
-              <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;">
-                <input type="checkbox" id="rpp-highlight-toggle" ${toggleChecked} style="margin:0;">
-                <span><strong>Highlight RPPs</strong> (turn off when running WMEPH)</span>
-              </label>
-              ${highlightEnabled ? `
-                <p style="margin: 2px 0 2px 20px; font-size: 10px; color:#666;">
-                  <span style="color:${HIGHLIGHT_COLORS.delete};">▲ delete</span> ·
-                  <span style="color:${HIGHLIGHT_COLORS.fix};">▲ needs fix</span> ·
-                  <span style="color:${HIGHLIGHT_COLORS.ok};">▲ ok</span>
-                </p>
               ` : ''}
             </div>`;
     }
@@ -2495,7 +2231,6 @@
         attachLockLevelListener(currentViewCount);
         attachRecentFixesListeners();
         attachCityFixToggleListener(currentViewCount);
-        attachHighlightToggleListener(currentViewCount);
     }
 
     function attachCityFixToggleListener(currentViewCount) {
@@ -2520,19 +2255,6 @@
                     // revert the input to the last valid value
                     ev.target.value = String(cityMaxSegmentDistance);
                 }
-            });
-        }
-    }
-
-    function attachHighlightToggleListener(currentViewCount) {
-        const toggle = document.getElementById('rpp-highlight-toggle');
-        if (toggle) {
-            toggle.addEventListener('change', (ev) => {
-                highlightEnabled = !!ev.target.checked;
-                saveHighlightPreference(highlightEnabled);
-                console.log(`🏠 highlight: ${highlightEnabled ? 'ENABLED' : 'disabled'}`);
-                refreshRPPHighlights(highlightEnabled ? getVisibleRPPs() : []);
-                displayUI(currentViewCount);
             });
         }
     }
@@ -2654,7 +2376,7 @@
     function selectVenueById(venueId, lat, lon) {
         try {
             if (lat != null && lon != null) {
-                mapSetCenter({ lon, lat }, CONFIG.scan.zoom);
+                W.map.setCenter({ lon, lat }, CONFIG.scan.zoom);
             }
             const venue = W.model.venues.getObjectById(venueId);
             if (venue) {

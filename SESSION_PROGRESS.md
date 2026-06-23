@@ -459,27 +459,30 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
 
 ## Version Summary
 
-| Version | Key Feature | Status |
-|---------|-------------|--------|
-| 3.0.0 | Manual pan + auto-fix | ✅ Working (from previous session) |
-| 3.1.0 | Auto-scan attempt | ❌ API errors |
-| 3.1.1 | Fixed WME API | ❌ Wrong zoom |
-| 3.2.0 | Fixed zoom + grid calc | ⚠️ Missing RPPs |
-| 3.3.0 | Layer management | ⚠️ Button issues |
-| 3.3.1 | Fixed buttons | ⚠️ Still missing RPPs |
-| 3.4.0 | 4 scans per tile | ⚠️ Still missing RPPs |
-| 3.5.0 | 6 scans per tile | ⚠️ Duplicate scan bug |
-| 3.5.1 | Fixed duplicates | ✅ Working but slow |
-| 3.6.0 | Event-driven + zoom 19 | ✅ Working and fast! |
-| 3.7.0 | Added ETA display | ✅ Enhanced UX |
-| 3.8.0 | Style guide + constants | ✅ Code quality |
-| 3.9.0 | ESLint integration | ✅ Automated linting |
-| 3.10.0 | Visual progress bar | ✅ Better UI feedback |
-| 3.10.1 | Zoom 17 experiment | ⚠️ Reverted |
-| 3.10.2 | Zoom 19 restored | ✅ Stable |
-| 3.11.0 | Auto-pause at 100 changes | ✅ Performance protection |
-| 3.12.0 | RPP tracking & scan duration | ✅ Analytics |
-| 3.12.1 | Progress bar snake fix | ✅ Current version |
+| Version | Key Feature                   | Status                            |
+| ------- | ----------------------------- | --------------------------------- |
+| 3.0.0   | Manual pan + auto-fix         | ✅ Working (from previous session) |
+| 3.1.0   | Auto-scan attempt             | ❌ API errors                      |
+| 3.1.1   | Fixed WME API                 | ❌ Wrong zoom                      |
+| 3.2.0   | Fixed zoom + grid calc        | ⚠️ Missing RPPs                   |
+| 3.3.0   | Layer management              | ⚠️ Button issues                  |
+| 3.3.1   | Fixed buttons                 | ⚠️ Still missing RPPs             |
+| 3.4.0   | 4 scans per tile              | ⚠️ Still missing RPPs             |
+| 3.5.0   | 6 scans per tile              | ⚠️ Duplicate scan bug             |
+| 3.5.1   | Fixed duplicates              | ✅ Working but slow                |
+| 3.6.0   | Event-driven + zoom 19        | ✅ Working and fast!               |
+| 3.7.0   | Added ETA display             | ✅ Enhanced UX                     |
+| 3.8.0   | Style guide + constants       | ✅ Code quality                    |
+| 3.9.0   | ESLint integration            | ✅ Automated linting               |
+| 3.10.0  | Visual progress bar           | ✅ Better UI feedback              |
+| 3.10.1  | Zoom 17 experiment            | ⚠️ Reverted                       |
+| 3.10.2  | Zoom 19 restored              | ✅ Stable                          |
+| 3.11.0  | Auto-pause at 100 changes     | ✅ Performance protection          |
+| 3.12.0  | RPP tracking & scan duration  | ✅ Analytics                       |
+| 3.12.1  | Progress bar snake fix        | ✅ Working                         |
+| 3.14.0  | SOFA refactor                 | ✅ Code quality                    |
+| 3.14.1  | Event listener + viewport fix | ✅ Bug fixes                       |
+| 3.14.2  | Chrome migration              | ✅ Current version                 |
 
 ---
 
@@ -574,7 +577,7 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
   - Persists across scans until stats are reset
 - **User Benefit**: Better understanding of scan coverage and performance
 
-### Version 3.12.1 - Progress Bar Snake Pattern Fix (Current)
+### Version 3.12.1 - Progress Bar Snake Pattern Fix
 **Fixed**: Progress bar now correctly increases throughout entire scan
 - **Bug**: Progress percentage would decrease when scanning right-to-left rows
 - **Root Cause**: Progress calculation didn't account for snake pattern direction
@@ -582,7 +585,35 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
   - Left-to-right rows (direction = 1): `tilesCompleted = currentCol`
   - Right-to-left rows (direction = -1): `tilesCompleted = totalCols - currentCol - 1`
 - **Result**: Progress bar now smoothly increases from 0% to 100% regardless of scan direction
-- **Code Location**: wme-rpp-auto-fixer-v3.12.1.user.js:873-882
+
+### Version 3.14.0 - SOFA Refactor
+**Changed**: Major code quality improvement applying SOFA principles
+- **Max Cyclomatic Complexity**: 43 → 9 (79% reduction)
+- **Avg Cyclomatic Complexity**: 6.5 → 3.1 (52% reduction)
+- **Avg Lines/Function**: 38.7 → 13.4 (65% reduction)
+- **Functions**: 22 → 56 (more focused, single-purpose)
+- Eliminated all "Very High" (>20) and "High" (11-20) complexity functions
+- Major refactors: displayUI() 235→12 functions, scanAndFixRPPs() 104→6 functions
+
+### Version 3.14.1 - Event Listener & NavigationPoint Fixes
+**Fixed**: Multiple critical bugs preventing script from working
+- **Event Listener Fix**: Changed `W.model.on('mergeend')` to `W.model.actionManager.events.on('afteraction')`
+  - Modern WME uses actionManager.events, not model.events directly
+- **NavigationPoint.toJSON() Fix**: Added `.toJSON()` conversion when creating entry points
+  - WME expects plain objects, not NavigationPoint instances
+  - Without this, entry points weren't being saved correctly
+- **Viewport Filtering Fix**: Added bounds check in `getVisibleRPPs()` using `W.map.getExtent().intersectsBounds(bounds)`
+  - Previously counted ALL RPPs in memory, not just visible ones
+  - Now correctly filters to only RPPs in current viewport
+
+### Version 3.14.2 - Cache Busting & Chrome Migration (Current)
+**Changed**: Version bump and browser migration
+- **Version Bump**: Force Tampermonkey to reload updated script
+- **Console Identifier**: Added `[VIEWPORT-FIX]` to console log for verification
+- **Browser Migration**: Moved development from Firefox to Chrome
+  - Firefox Violentmonkey lacks proper local file tracking
+  - Chrome + Tampermonkey provides better development workflow
+- **Documentation Updates**: All WME docs updated to reference Chrome/Tampermonkey
 - Current active version
 
 ### Infrastructure Improvements
@@ -601,16 +632,18 @@ Trade-off: v3.6.0 is much faster but may miss some very late-loading RPPs. In pr
 
 ## Conclusion
 
-Successfully transformed the script from manual-only (v3.0.0) to a fully-featured, production-ready auto-fixer (v3.12.1). The journey involved:
-- 20 version iterations
-- Fixing 6 major bugs
+Successfully transformed the script from manual-only (v3.0.0) to a fully-featured, production-ready auto-fixer (v3.14.2). The journey involved:
+- 23 version iterations
+- Fixing 9 major bugs
 - Learning WME's modern API
 - Understanding event-driven architecture
 - Optimizing for performance
-- Implementing professional code standards
-- Adding automated quality checks
+- Implementing professional code standards (SOFA)
+- Adding automated quality checks (ESLint)
 - Enhancing user experience with visual feedback
 - Implementing WME performance limit protection
 - Adding comprehensive scan analytics
+- Fixing viewport filtering for accurate RPP counts
+- Migrating to Chrome/Tampermonkey for better development workflow
 
-Final result: **~8x faster** than v3.5.1 with professional code quality, automated linting, visual progress tracking, auto-pause at WME's performance limit (100 changes), scan duration tracking, RPP count analytics, and comprehensive version control.
+Final result: **~8x faster** than v3.5.1 with professional code quality (79% complexity reduction), automated linting, visual progress tracking, auto-pause at WME's performance limit (100 changes), scan duration tracking, RPP count analytics, accurate viewport filtering, and comprehensive version control.
