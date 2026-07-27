@@ -26,4 +26,4 @@ Thumbs.db
 node_modules/
 
 # Local Tampermonkey stub loader (hardcodes a machine-specific file:/// path)
-wme-rpp-auto-fixer-loader.user.js
+wme-rpp-auto-fixer-loader.user.js*
